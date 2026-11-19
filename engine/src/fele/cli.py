@@ -280,7 +280,12 @@ def evaluate(model: str = "baseline_elo", mlflow: bool = True) -> None:
     path = run.write_report(model, run.report(model, data, res))
     typer.echo(f"report -> {path}")
     if mlflow:
-        typer.echo(f"MLflow run {run.log_mlflow(model, res, path)} (data_local/mlflow.db)")
+        from fele.eval.tracking import log_mlflow
+
+        run_id = log_mlflow(model, res, path)
+        typer.echo(
+            f"MLflow run {run_id} (data_local/mlflow.db)" if run_id else "MLflow not installed: uv sync --extra ml"
+        )
 
 
 @app.command()

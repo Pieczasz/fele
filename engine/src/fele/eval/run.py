@@ -12,7 +12,7 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 
-from fele.config import REPO_ROOT, settings
+from fele.config import REPO_ROOT
 from fele.eval import metrics, splits
 from fele.features.actions import action_frame
 from fele.features.outcome import outcome_frame
@@ -277,24 +277,6 @@ def report(model: str, data: Data, res: Results) -> str:
         "",
     ]
     return "\n".join(lines)
-
-
-def log_mlflow(model: str, res: Results, report_path: Path) -> str:
-    """Record one MLflow run per evaluation in data_local/mlflow.db (metrics + the report as an artifact)."""
-    import mlflow  # noqa: PLC0415 - heavy import, only when tracking is on
-
-    mlflow.set_tracking_uri(f"sqlite:///{settings().local() / 'mlflow.db'}")
-    mlflow.set_experiment("fele-evaluate")
-    with mlflow.start_run(run_name=model) as run:
-        mlflow.log_param("model", model)
-        for name, preds in res.outcome.items():
-            m = metrics.outcome_metrics(preds["y"].to_numpy(), preds["p"].to_numpy())
-            mlflow.log_metrics({f"{name}.{k}": v for k, v in m.items() if k != "n"})
-        for name, preds in res.actions.items():
-            m = metrics.action_metrics(preds["p_true"].to_numpy(), preds["rank"].to_numpy())
-            mlflow.log_metrics({f"{name}.{k}": v for k, v in m.items() if k != "n"})
-        mlflow.log_artifact(str(report_path))
-        return run.info.run_id
 
 
 def write_report(model: str, text: str) -> Path:
