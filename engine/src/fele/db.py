@@ -26,13 +26,15 @@ def _csv(p: Path) -> str:
 
 
 def build_catalog() -> dict[str, list[str]]:
-    """(Re)create schemas grid / leaguepedia / soloq with views over local files. Returns created views."""
+    """(Re)create schemas grid / lol / leaguepedia / soloq / aggregates as views over local files."""
     s = settings()
     views: dict[str, str] = {}
     if s.meta_dir.exists():
         for t in GRID_META:  # meta tables hold both titles; keep LoL only
             views[f"grid.{t}"] = f"{_csv(s.meta_dir / f'{t}.csv')} WHERE title = 'lol'"
         views["grid.series"] = _csv(s.lol_dir / "series.csv")
+    for f in sorted(s.local("parquet").glob("*.parquet")):  # clean tables from `fele ingest`
+        views[f"lol.{f.stem}"] = f"SELECT * FROM read_parquet('{_sql_path(f)}')"
     lp = s.local("external", "leaguepedia_hf")
     for f in sorted(lp.glob("*.parquet")):
         views[f"leaguepedia.{f.stem}"] = f"SELECT * FROM read_parquet('{_sql_path(f)}')"

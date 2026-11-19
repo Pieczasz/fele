@@ -11,8 +11,8 @@ setup:  ## install toolchain + dependencies, enable the data-leak hook
 	git config core.hooksPath .githooks
 	cd engine && uv run nbstripout --install --attributes ../.gitattributes
 
-data:  ## fetch static/external data and build the DuckDB catalog (needs the GRID clone + .env)
-	cd engine && uv run fele fetch-ddragon && uv run fele fetch-leaguepedia-hf && uv run fele db
+data:  ## ingest GRID, fetch static/external data, build the DuckDB catalog (needs the GRID clone + .env)
+	cd engine && uv run fele ingest && uv run fele fetch-ddragon && uv run fele fetch-leaguepedia-hf && uv run fele db
 
 check:  ## everything CI runs (lint, format, types, tests, data-leak guard)
 	scripts/check_no_data.sh

@@ -81,7 +81,7 @@ Do not ask the agent to run several phases in one go. Every phase ends with a **
 - **Present:** item purchases/sells/undos, level-ups (with player position snapshot), kills, multikills, tower/plate/inhibitor/nexus events, scuttles (top/bot), void grubs, each drake type, herald, baron, Atakhan, NPC respawn clocks, team/player gold, damage, vision score, KDA.
 - **Absent:** no ward placement events; no events for normal jungle camps (raptors, wolves, etc.); **no role column**. Positions exist only as snapshots at event times (not continuous tracking).
 - **Roster order ≠ role.** Checked: "jungle" champions appear at roster index 1 only ~57% of the time; ADCs at index 3 only ~50%. → Role inference is required (Phase 2).
-- **Hard Fearless confirmed** in all leagues: across 569 multi-game series only 5 champion re-picks were found (all same team, likely remakes/data quirks — investigate). Bans don't carry over.
+- **Hard Fearless confirmed** in all leagues: after applying rollbacks there are **no** re-picks (Phase 2). Raw `team-picked-character` events show 183 apparent re-picks, all draft corrections later undone with `team-!picked-character`. Bans don't carry over.
 - **Small samples late in series:** series reaching game 4: 79 (49 end there, 30 go to game 5) (all leagues; corrected 2026-11-18 from `meta/games.csv`). Cloud9: 4 and 6.
 - **2026 draft rules (Phase 0):** draft order A B A B A B / A B B A A B / B A B A / B A A B where A = first-pick team, which **may be red side** (First Selection: holder picks side *or* pick order; loser of previous game holds it from G2). No Fearless reset in G5 (LCS). Details: `docs/COMPLIANCE.md` §3.
 - Champion names are display names (e.g. "Wukong", "K'Sante") — Data Dragon uses keys like `MonkeyKing`, `KSante` → mapping table required.
@@ -228,7 +228,7 @@ After every phase the agent also appends a short entry to `AI_SHOWCASE.md` (what
 
 4. **Role inference:** combine (a) Smite purchase/summoner spell signals for jungle, (b) early position snapshots (level 1–3 positions per lane), (c) champion role priors from Data Dragon tags / solo-queue role frequencies, (d) roster order as a weak prior. Solve as an assignment problem per team-game (Hungarian algorithm over role probabilities). Store confidence; flag low-confidence games.
 5. Validate the standard draft order from `draftActions` sequences and record it in the data dictionary.
-6. Investigate the 5 Fearless re-picks and document the cause.
+6. ~~Investigate the 5 Fearless re-picks~~ Done: they are rolled-back draft entries; 0 remain (see `docs/DATA_DICTIONARY.md`).
 7. `docs/DATA_DICTIONARY.md` for every table.
 
 **Acceptance (tests on real data, run locally):**

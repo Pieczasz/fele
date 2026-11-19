@@ -43,3 +43,28 @@ One entry per phase of [AGENT_PLAN.md](AGENT_PLAN.md): what was asked, what the 
   - A deprecation warning suggested installing an unfamiliar package (`httpx2`); the install was blocked as a
     supply-chain risk, and the API tests switched to `httpx.ASGITransport` instead.
 - **Human corrections:** project name (`fele`), Docker + DuckDB-in-PyCharm request, "commit `.idea`/`.air` as evidence".
+
+### Phase 2 — GRID ingestion & role inference (2026-11-19)
+
+- **Asked:** "continue working" → the plan's Phase 2: clean, tested tables from the GRID feeds, role inference,
+  draft-order validation, the Fearless re-pick investigation, a data dictionary.
+- **Agent produced:** a feed replayer that applies rollbacks, a 45-second parallel ingest into 10 Parquet tables
+  (`lol.*` in DuckDB), role inference that scores all 120 role assignments per team-game, `fele ingest`, a
+  `prefs-init` that uses the inferred roles, synthetic-feed unit tests + a `real_data` acceptance test,
+  `docs/DATA_DICTIONARY.md`.
+- **Caught along the way:**
+  - The plan's "Smite purchase" check can't work: the feed names no jungle items or summoner spells. Neutral-monster
+    kills are used instead.
+  - The first role model (lane = role) agreed with players' usual roles only 88% of the time. Early-2025 lane swaps
+    send the top laner bot and the duo top, and supports roam too much to anchor the duo's lane. Scoring both lane
+    hypotheses with champion priors learned from confident games (EM) brought it to 99.9%. The remaining "errors"
+    are real role changes (a jungler who moved to support).
+  - The "5 Fearless re-picks" were draft corrections GRID rolled back; 0 remain.
+  - GRID renumbers draft actions when a ban is skipped → slots are aligned to the template instead of trusting `seq`.
+  - The data confirms the 2026 First Selection rule: red side picked first in ~45% of 2026 games, almost never in 2025.
+  - `slayDragon` duplicates the typed drake event since 15.10 → dropped to avoid double counting.
+  - Benched substitutes appear as "active" with no champion → dropped.
+  - GRID ships Riot PUUIDs for pro players; deliberately not ingested (licence §3(e), no profiling via other data).
+  - A formatter rewrapped a block mid-edit, leaving a reference to a not-yet-defined variable that Pyright didn't flag;
+    caught by reading the function back before running it.
+- **Human corrections:** _(fill in at checkpoint: spot-check Cloud9 games in PyCharm)_

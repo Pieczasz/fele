@@ -62,12 +62,13 @@ cd web && pnpm dev                 # http://localhost:5173
 | Command | What it does |
 |---|---|
 | `grid-summary` | Sanity check of the GRID data (counts only) |
+| `ingest` | Replays all GRID feeds into Parquet tables with inferred roles (`lol.*`, ~45 s); see `docs/DATA_DICTIONARY.md` |
 | `fetch-ddragon` | Data Dragon static data + icons for every GRID patch and the live patch |
 | `fetch-leaguepedia-hf` | CC BY-SA pro pick/ban history, all leagues 2011–2026 (local only) |
 | `riot-check` | Verifies the Riot key and prints its rate limits |
 | `sample-soloq` / `soloq-aggregate` | High-elo solo queue sample (KR/EUW/NA, resumable) → champion × role × patch table |
-| `prefs-init` | Pre-fills `config/preferences.yaml` with the Cloud9 roster |
-| `db` | Builds `data_local/fele.duckdb`: views `grid.*`, `leaguepedia.*`, `soloq.*`, `aggregates.*` |
+| `prefs-init` | Pre-fills `config/preferences.yaml` with Cloud9's latest lineup, inferred roles and top champions |
+| `db` | Builds `data_local/fele.duckdb`: views `grid.*`, `lol.*`, `leaguepedia.*`, `soloq.*`, `aggregates.*` |
 | `serve` | API with Swagger UI at `/docs`, ReDoc at `/redoc`, OpenAPI spec at `/openapi.json` |
 
 The web app's TypeScript API client is generated from the OpenAPI spec: `cd web && pnpm gen:api`.

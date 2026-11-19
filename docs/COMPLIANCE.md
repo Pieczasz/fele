@@ -44,6 +44,9 @@ Only sources marked ✅ or ⚠️ (with their conditions met) may be used (AGENT
 - 2025 data (most of GRID) used the old rule: blue always picked first; the loser chose side.
 - UNVERIFIED: remake handling, G5 rules in LCK/LEC/LPL 2026.
 
+- [x] GRID players' `externalLinks` carry Riot PUUIDs. fele never ingests or uses them: linking GRID players to
+  Riot API accounts would be "combining with other data to profile individuals" (GRID licence §3(e)).
+
 ## 4. Open questions for organizers (human to send)
 
 Send via Cloud9 Discord office hours (discord.gg/cloud9) or the Devpost "Email the hackathon manager" link.
@@ -57,8 +60,10 @@ Send via Cloud9 Discord office hours (discord.gg/cloud9) or the Devpost "Email t
 
 ## 5. Human to-dos
 
-1. **Confirm the AI-tool training/retention opt-out is enabled** for every AI tool that touches GRID data (license §4(c)).
-2. Send the organizer questions above.
-3. Apply for a Riot **personal key** and register the product; meanwhile regenerate the dev key daily.
+1. ~~Confirm the AI-tool training/retention opt-out~~ Confirmed by the human, 2026-11-19 (license §4(c)).
+2. Organizer questions above: deferred by the human (2026-11-19). Until answered, keep the conservative defaults
+   (aggregates only, solo-queue pools off by default, Leaguepedia kept separate).
+3. Riot **personal key**: product registered (URL verified via `https://pieczasz.github.io/fele/riot.txt`), approval
+   pending (2026-11-19). Meanwhile the dev key in `.env` is regenerated daily.
 4. Optionally register for Riot Games Open Access (riot.grid.gg) and read its terms.
 5. Create a Leaguepedia bot password only if we decide to use the Cargo API directly.
