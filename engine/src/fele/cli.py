@@ -2,7 +2,7 @@
 
 import asyncio
 from collections import Counter
-from typing import Annotated, NoReturn
+from typing import NoReturn
 
 import httpx
 import typer
@@ -42,43 +42,38 @@ def grid_summary() -> None:
 
 
 @app.command()
-def fetch_ddragon(
-    all_patches: Annotated[bool, typer.Option(help="Also fetch champion.json for every GRID patch")] = True,
-) -> None:
-    """Download Data Dragon static data (champions, items, summoners, icons) into data_local/ddragon."""
-    from fele.ingest.grid import read_meta
-    from fele.static import champions as ch
+def fetch_ddragon() -> None:
+    """Cache Data Dragon (championFull, items, summoners) for every patch since 15.1, plus the latest icons."""
     from fele.static import ddragon as dd
+    from fele.static.build import FIRST_PATCH
 
-    with httpx.Client(timeout=30, follow_redirects=True) as c:
+    with httpx.Client(timeout=60, follow_redirects=True) as c:
         vs = dd.versions(c)
-        latest = vs[0]
-        typer.echo(f"latest Data Dragon version: {latest}")
-        champs = dd.champions(c, latest, full=True)
-        dd.items(c, latest)
-        dd.summoners(c, latest)
-        for key in champs["data"]:
+        wanted = dd.versions_since(FIRST_PATCH, vs)
+        for v in wanted:
+            dd.champions(c, v, full=True)
+            dd.items(c, v)
+            dd.summoners(c, v)
+        latest = wanted[-1]
+        for key in dd.champions(c, latest, full=True)["data"]:
             dd.champion_icon(c, latest, key)
-        typer.echo(f"latest: {len(champs['data'])} champions + icons, items, summoners cached")
+    typer.echo(f"Data Dragon {wanted[0]} .. {latest}: {len(wanted)} versions cached (+ latest champion icons)")
 
-        if all_patches and settings().meta_dir.exists():
-            patches = sorted(
-                {g["patch"] for g in read_meta("games") if g["patch"]},
-                key=lambda patch: tuple(map(int, patch.split("."))),
-            )
-            missing: list[str] = []
-            for p in patches:
-                v = dd.version_for_patch(p, vs)
-                if v:
-                    dd.champions(c, v)
-                else:
-                    missing.append(p)
-            typer.echo(f"GRID patches: {len(patches)} fetched, no DDragon version for: {missing or 'none'}")
 
-            mapping = ch.build_mapping(champs)
-            names = {r["name"] for r in read_meta("characters")}
-            unmapped = sorted(n for n in names if not ch.resolve(n, mapping))
-            typer.echo(f"GRID champions: {len(names)}, unmapped: {unmapped or 'none'}")
+@app.command()
+def static() -> None:
+    """Build static tables (champion mapping, tags, patch deltas) into data_local/static and refresh the DB."""
+    from fele.db import build_catalog
+    from fele.ingest.build import parquet_dir
+    from fele.static.build import build, role_gaps, static_dir
+
+    for name, n in build().items():
+        typer.echo(f"{name}: {n}")
+    build_catalog()
+    typer.echo(f"-> {static_dir()} (DuckDB schema `static`)")
+    if (parquet_dir() / "participants.parquet").exists():
+        gaps = role_gaps()
+        typer.echo(f"pro roles missing from champion_tags.csv: {gaps.rows() if gaps.height else 'none'}")
 
 
 @app.command()

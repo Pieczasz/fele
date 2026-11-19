@@ -30,10 +30,19 @@ def versions(client: httpx.Client, *, refresh: bool = True) -> list[str]:
     return _get_json(client, f"{BASE}/api/versions.json", _cache_dir() / "versions.json", refresh=refresh)
 
 
-def version_for_patch(patch: str, all_versions: list[str]) -> str | None:
-    """'15.1' -> '15.1.1' (first DDragon version of that patch)."""
-    matches = [v for v in all_versions if v.startswith(f"{patch}.")]
-    return matches[-1] if matches else None
+def patch_of(version: str) -> str:
+    """'16.3.1' -> '16.3'."""
+    return ".".join(version.split(".")[:2])
+
+
+def patch_key(patch: str) -> tuple[int, ...]:
+    return tuple(int(x) for x in patch.split("."))
+
+
+def versions_since(first_patch: str, all_versions: list[str]) -> list[str]:
+    """One Data Dragon version per patch from `first_patch` on, oldest first (e.g. 15.1.1 .. 16.23.1)."""
+    by_patch = {patch_of(v): v for v in all_versions if v[0].isdigit()}  # versions.json is newest first
+    return [by_patch[p] for p in sorted(by_patch, key=patch_key) if patch_key(p) >= patch_key(first_patch)]
 
 
 def _data(client: httpx.Client, version: str, name: str) -> JsonObj:

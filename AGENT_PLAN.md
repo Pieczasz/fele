@@ -252,6 +252,8 @@ After every phase the agent also appends a short entry to `AI_SHOWCASE.md` (what
 
 **Acceptance:** all champions mapped; tags cover 100% of champions seen in data + current roster; patch delta table exists for every patch transition.
 
+**Status (2026-11-19):** done — `fele static`; tags in `engine/src/fele/static/champion_tags.csv` (173 champions, rows with a `review` note need a look); deltas from base stats + cooldowns/costs/ranges only (Data Dragon has no spell damage numbers). See `docs/DATA_DICTIONARY.md`.
+
 **🛑 Checkpoint:** human reviews the tag CSV (this directly affects comp analysis quality).
 
 ---

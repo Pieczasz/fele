@@ -7,14 +7,12 @@ import pytest
 from fele import prefs
 from fele.external.soloq import champion_patch_table
 from fele.ingest.grid import read_meta, series_index, series_path
-from fele.static.ddragon import version_for_patch
+from fele.static.ddragon import versions_since
 
 
-def test_version_for_patch() -> None:
-    versions = ["16.23.1", "16.22.1", "15.1.1", "15.10.1"]
-    assert version_for_patch("15.1", versions) == "15.1.1"
-    assert version_for_patch("15.10", versions) == "15.10.1"
-    assert version_for_patch("14.1", versions) is None
+def test_versions_since() -> None:
+    versions = ["16.23.1", "16.1.1", "15.10.1", "15.2.1", "15.1.1", "14.24.1", "lolpatch_7.20"]
+    assert versions_since("15.1", versions) == ["15.1.1", "15.2.1", "15.10.1", "16.1.1", "16.23.1"]
 
 
 def test_meta_readers_filter_by_title(tmp_settings: Path) -> None:

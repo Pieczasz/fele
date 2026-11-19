@@ -120,6 +120,52 @@ games of the series (hard Fearless). Bans don't carry over. **No re-picks** exis
 feeds contain 183 apparent re-picks, all of them draft entries that GRID later rolled back with
 `team-!picked-character`.
 
+## Static tables — schema `static` (`uv run fele fetch-ddragon && uv run fele static`)
+
+Built from Data Dragon (one version per patch, 15.1.1 → latest, cached in `data_local/ddragon/`) and the hand-made
+tag file `engine/src/fele/static/champion_tags.csv` (in git: our own work, not licensed data). Written to
+`data_local/static/*.parquet`. The build fails if a champion lacks tags or a GRID champion can't be mapped.
+
+### `static.champion_map` — GRID name ↔ Data Dragon (156)
+
+`grid_character_id, grid_name, champion` (Data Dragon key, e.g. `MonkeyKing` for `Wukong`), `riot_id` (numeric),
+`name`. Covers GRID `characters.csv` plus champions that were only ever banned (GRID omits those, e.g. Graves).
+Join `lol.draft_actions.champion_id` or `lol.participants.champion` (= `grid_name`) to it.
+
+### `static.champions` — one row per current champion (173)
+
+Data Dragon fields (`riot_id, ddragon_tags, resource, attack_range, first_patch` = first patch since 15.1 it
+appears in, null if older) plus the attribute tags:
+
+| Column | Values | Meaning |
+|---|---|---|
+| roles | `top\|jungle\|…` | Roles it is played in (pro + solo queue), most common first |
+| damage, ap_share | `AD`/`AP`/`mixed`, 0–1 | Share of damage that is magic; `mixed` = 0.35–0.65 |
+| engage, disengage, peel, frontline, poke, dive, splitpush, waveclear | 0–3 | 0 none · 1 some · 2 good · 3 a defining strength |
+| scaling | `early`/`mid`/`late` | When the champion peaks |
+| hard_cc | count | Abilities with hard CC (stun, root, knock-up/back, pull, charm, fear, taunt, sleep, suppression, polymorph) |
+| range | `melee`/`ranged`/`mixed` | `mixed` = form-switchers (Jayce, Nidalee, Elise, Gnar, Kayle) |
+| review | text | Why a row needs a human look (new or reworked champion, uncertain value) |
+
+Tags describe the champion as it is now; they are static attributes (fine for any patch), never strength.
+`fele static` also prints pro roles (≥ 5 games and ≥ 20% of a champion's games) that the tags don't list.
+
+### `static.patch_deltas` — one row per champion per patch transition (7,890 = 46 transitions)
+
+`champion, patch, prev_patch, new, stat_score, spell_score, score, magnitude, buffed, nerfed, rework, n_changes,
+changes[], systemic[]`. Derived from Data Dragon numbers only (patch-note text is copyrighted):
+
+- base stats are compared at level 9 (base + 8 × growth), Q/W/E/R cooldowns, costs and ranges per rank;
+- `score` = sum of signed relative changes (positive = buff; cost and range count half; each part capped at ±0.5);
+- `buffed`/`nerfed` = sign of the net score; `changes` lists every raw change (e.g. `W cooldown 10/9/8/7/6→9/8/7/6/5`);
+- `rework` = a spell was replaced (Naafiri 15.6 swapped W/R, Shyvana 16.6 new kit);
+- `systemic` = stat fields changed for > half of all champions in that patch, left out of the scores. Only 16.5:
+  Data Dragon set `attackdamageperlevel` to 0 for every champion and keeps it at 0, so AD growth changes after 16.5
+  are invisible.
+
+**Limits:** Data Dragon doesn't maintain spell damage values (`effect` arrays are mostly zeros), so damage-only buffs
+and nerfs are missed. Treat `score` as a rough signal; 333 of 7,890 rows have any change.
+
 ## Other schemas in `fele.duckdb`
 
 - `grid.*`: GRID `meta/*.csv` and `lol/series.csv` as-is (LoL rows only).

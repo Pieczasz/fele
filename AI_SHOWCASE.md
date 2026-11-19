@@ -68,3 +68,22 @@ One entry per phase of [AGENT_PLAN.md](AGENT_PLAN.md): what was asked, what the 
   - A formatter rewrapped a block mid-edit, leaving a reference to a not-yet-defined variable that Pyright didn't flag;
     caught by reading the function back before running it.
 - **Human corrections:** _(fill in at checkpoint: spot-check Cloud9 games in PyCharm)_
+
+### Phase 3 — Static data & champion knowledge (2026-11-19)
+
+- **Asked:** "continue development" → the plan's Phase 3: Data Dragon for every patch, GRID ↔ Data Dragon champion
+  mapping, a champion attribute tag CSV for human review, numeric patch deltas.
+- **Agent produced:** `fele fetch-ddragon` (47 versions, 15.1.1 → 16.23.1) and `fele static` (DuckDB schema `static`);
+  `champion_tags.csv` with 15 attributes for all 173 champions and a written rubric; a validator that fails the build on
+  missing/duplicate/out-of-range tags; a check of tagged roles against roles inferred from pro games; patch deltas with
+  readable change lists; synthetic unit tests + a `real_data` acceptance test.
+- **Caught along the way:**
+  - Data Dragon spell `effect` arrays are zeros, so damage changes can't be measured; deltas use base stats,
+    cooldowns, costs and ranges, and the docs say so.
+  - Patch 16.5 shows every champion "nerfed": Data Dragon set AD growth to 0 for all champions. Fields that change for
+    most champions at once are now treated as game-wide and kept out of champion scores.
+  - 16.15 added `Jade_*` mode variants of 60 champions → skipped.
+  - Graves was only ever banned, so GRID's `characters.csv` leaves him out; the map also reads champions from drafts.
+  - Shyvana was reworked in 16.6 and Locke/Zaahen came out after the agent's knowledge cutoff: their tags were drafted
+    from Data Dragon ability text and flagged for review instead of guessed from memory.
+- **Human corrections:** _(fill in at checkpoint: review the tag CSV, starting with rows that have a `review` note)_
