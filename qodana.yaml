@@ -5,16 +5,18 @@ linter: jetbrains/qodana-python-community:2026.2
 # The image ships Python 3.12; fele needs 3.14 + its dependencies for accurate resolution.
 # Built in Qodana's cache dir so a mounted host .venv is never touched.
 # The linter must get QODANA_PYTHON_PATH=/data/cache/fele-venv/bin/python (set in CI and compose).
+# uv's cache and Python installs also go to /data/cache: the CI container user can't write to $HOME.
 bootstrap: |
-  pip install --quiet uv
-  cd engine && UV_PROJECT_ENVIRONMENT=/data/cache/fele-venv uv sync --locked --python 3.14 --quiet
+  export UV_CACHE_DIR=/data/cache/uv UV_PYTHON_INSTALL_DIR=/data/cache/uv-python
+  pip install --quiet --target /data/cache/uv-bin uv
+  cd engine && UV_PROJECT_ENVIRONMENT=/data/cache/fele-venv /data/cache/uv-bin/bin/uv sync --locked --python 3.14 --quiet
 profile:
   name: qodana.recommended
 failThreshold: 0
 exclude:
   - name: All
     paths:
-      - webB
+      - web
       - data_local
       - scratch
       - docs
