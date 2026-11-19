@@ -31,17 +31,17 @@ def test_champion_patch_table(tmp_settings: Path) -> None:
     out.mkdir(parents=True)
     rows = [
         {"match_id": "m1", "platform": "kr", "patch": "16.23", "team_id": 100, "win": True, "champion_id": 1,
-         "champion": "Annie", "position": "MIDDLE", "team_bans": [2]},
+         "champion": "Annie", "position": "MIDDLE", "team_bans": [2], "duration_s": 1800},
         {"match_id": "m1", "platform": "kr", "patch": "16.23", "team_id": 200, "win": False, "champion_id": 2,
-         "champion": "Olaf", "position": "JUNGLE", "team_bans": [1]},
+         "champion": "Olaf", "position": "JUNGLE", "team_bans": [1], "duration_s": 1800},
         {"match_id": "m2", "platform": "kr", "patch": "16.23", "team_id": 100, "win": False, "champion_id": 1,
-         "champion": "Annie", "position": "MIDDLE", "team_bans": []},
+         "champion": "Annie", "position": "MIDDLE", "team_bans": [], "duration_s": 1200},
     ]  # fmt: skip
     pl.DataFrame(rows).write_parquet(out / "batch_1.parquet")
     table = champion_patch_table()
     annie = table.filter(pl.col("champion") == "Annie").row(0, named=True)
     assert (annie["games"], annie["wins"], annie["matches"], annie["bans"]) == (2, 1, 2, 1)
-    assert annie["win_rate"] == 0.5
+    assert (annie["win_rate"], annie["avg_duration_s"]) == (0.5, 1500)
 
 
 @pytest.mark.usefixtures("tmp_settings")

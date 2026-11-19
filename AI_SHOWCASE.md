@@ -87,3 +87,18 @@ One entry per phase of [AGENT_PLAN.md](AGENT_PLAN.md): what was asked, what the 
   - Shyvana was reworked in 16.6 and Locke/Zaahen came out after the agent's knowledge cutoff: their tags were drafted
     from Data Dragon ability text and flagged for review instead of guessed from memory.
 - **Human corrections:** _(fill in at checkpoint: review the tag CSV, starting with rows that have a `review` note)_
+
+### Phase 4 — Riot API: solo-queue meta sample (2026-11-19)
+
+- **Asked:** "continue" → the plan's Phase 4: current-patch high-elo meta signal, matchups, item builds, and (only if
+  approved) pro players' solo-queue pools.
+- **Agent produced:** the Phase 1 sampler extended to target the live patch (counting only its games and starting
+  near its release), deterministic 25% timeline sampling for item builds, a 429 counter, and partial results that
+  survive interruption. Added `soloq_matchups` and `soloq_items` aggregates, plus a `player-soloq` command limited to
+  coach-entered Riot IDs and off by default. Tests use synthetic Riot payloads with fake ids, including a resume test
+  that proves a re-run makes no match or timeline requests.
+- **Result:** 907 new patch-16.23 matches (KR 300, EUW 305, NA 302), 205 timelines, 0 rate-limit errors on a
+  development key.
+- **Caught along the way:** the first sample (Phase 1) was mostly the previous patch (16.22): only 10–26% of games
+  were on 16.23, so the "current patch" signal was thin. The sampler now counts only target-patch games.
+- **Human corrections:** _(fill in at checkpoint: key handling and data volume)_

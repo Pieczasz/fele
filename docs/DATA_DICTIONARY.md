@@ -170,7 +170,29 @@ and nerfs are missed. Treat `score` as a rough signal; 333 of 7,890 rows have an
 
 - `grid.*`: GRID `meta/*.csv` and `lol/series.csv` as-is (LoL rows only).
 - `leaguepedia.*`: CC BY-SA 3.0 pick/ban history (`fele fetch-leaguepedia-hf`), kept separate from GRID data.
-- `soloq.participants`, `aggregates.*`: Riot API high-elo sample and its champion × role × patch aggregates.
+- `soloq.participants`: one row per player-match of the Riot API high-elo sample (see below); no PUUIDs or names.
+
+## Solo-queue aggregates — schema `aggregates` (`fele sample-soloq`, `fele soloq-aggregate`)
+
+`fele sample-soloq` samples Challenger + Grandmaster ranked solo games (queue 420) on KR, EUW and NA. It counts only
+games on the target patch (default: the live Data Dragon patch); games from the previous patch are kept too. It
+starts from the earliest game of that patch seen so far (≈ the patch release), otherwise `--days` back. A fixed 25%
+of matches (chosen by a hash of the match id, so re-runs pick the same ones) also get a timeline for item builds.
+Every response is cached in `data_local/riot_cache/`, so an interrupted run resumes without repeating requests.
+
+| Table | Grain | Columns |
+|---|---|---|
+| `soloq_champion_patch` | champion × position × patch | games, wins, win_rate, pick_rate, bans, platforms, avg_duration_s, matches |
+| `soloq_matchups` | champion × lane opponent × position × patch | games, wins, win_rate |
+| `soloq_items` | champion × position × patch × first (up to) 3 completed items | games, wins, share, win_rate |
+| `player_soloq_pool` | coach's player × champion | games, wins, win_rate, last_played, patches |
+
+- Positions are Riot's `teamPosition` (`TOP`, `JUNGLE`, `MIDDLE`, `BOTTOM`, `UTILITY`).
+- "Completed item" = buyable on Summoner's Rift, nothing builds out of it, ≥ 1000 gold, not a consumable (that patch's
+  Data Dragon `item.json`). Undone purchases are removed.
+- `player_soloq_pool` (`fele player-soloq`) is **off by default**: it only looks up Riot IDs the coach typed into
+  `config/preferences.yaml` (`"GameName#TAG@na1"`), uses only that player's own row of each match, and is never
+  joined to GRID tables (licence §3(e) question to the organizers is still open).
 
 ## What GRID data must not be used for
 

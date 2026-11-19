@@ -95,30 +95,71 @@ def riot_check(platform: str = "euw1") -> None:
         typer.echo("Key rejected — development keys expire every 24h; regenerate at developer.riotgames.com")
 
 
+def _live_patch() -> str | None:
+    """Latest patch in the cached Data Dragon versions.json (run `fele fetch-ddragon` to refresh)."""
+    import json
+
+    path = settings().local("ddragon") / "versions.json"
+    return ".".join(json.loads(path.read_text())[0].split(".")[:2]) if path.exists() else None
+
+
 @app.command()
-def sample_soloq(platforms: str = "kr,euw1,na1", matches: int = 300, days: int = 14) -> None:
-    """Sample high-elo ranked solo matches per platform (resumable; cached)."""
+def sample_soloq(
+    platforms: str = "kr,euw1,na1",
+    matches: int = 300,
+    days: int = 14,
+    patch: str | None = None,
+    timeline_share: float = 0.25,
+) -> None:
+    """Sample high-elo ranked solo matches per platform (resumable; cached). Counts only `patch` (default: live)."""
     from fele.external.soloq import sample
 
-    async def run() -> list[int]:
-        return await asyncio.gather(*(sample(name.strip(), matches, days) for name in platforms.split(",")))
+    target = patch or _live_patch()
+    names = [p.strip() for p in platforms.split(",")]
 
-    for p, n in zip(platforms.split(","), asyncio.run(run()), strict=True):
-        typer.echo(f"{p}: {n} new matches")
+    async def run() -> list[dict[str, int]]:
+        return await asyncio.gather(
+            *(sample(p, matches, days, patch=target, timeline_share=timeline_share) for p in names)
+        )
+
+    for p, stats in zip(names, asyncio.run(run()), strict=True):
+        typer.echo(f"{p}: {stats} (patch {target})")
 
 
 @app.command()
 def soloq_aggregate() -> None:
-    """Build data_local/aggregates/soloq_champion_patch.parquet from sampled matches."""
-    from fele.external.soloq import champion_patch_table
+    """Build data_local/aggregates/soloq_{champion_patch,matchups,items}.parquet from sampled matches."""
+    from fele.db import build_catalog
+    from fele.external.soloq import champion_patch_table, items_table, matchup_table
 
-    df = champion_patch_table()
-    if df.is_empty():
+    tables = {
+        "soloq_champion_patch": champion_patch_table(),
+        "soloq_matchups": matchup_table(),
+        "soloq_items": items_table(),
+    }
+    if tables["soloq_champion_patch"].is_empty():
         die("No sampled matches yet — run `fele sample-soloq` first")
-    out = settings().local("aggregates") / "soloq_champion_patch.parquet"
+    for name, df in tables.items():
+        df.write_parquet(settings().local("aggregates") / f"{name}.parquet")
+        typer.echo(f"{name}: {df.height} rows")
+    build_catalog()
+    champ = tables["soloq_champion_patch"]
+    typer.echo(champ.filter(champ["games"] >= MIN_GAMES_TO_SHOW).sort("win_rate", descending=True).head(10))
+
+
+@app.command()
+def player_soloq(days: int = 30, max_matches: int = 100) -> None:
+    """Recent solo-queue champion pools for Riot IDs the coach entered in config/preferences.yaml (off if none)."""
+    from fele import prefs
+    from fele.external.player_soloq import pools
+
+    p = prefs.load()
+    if not any(pl.riot_ids for pl in p.players):
+        die("No riot_ids in config/preferences.yaml — this feature stays off until the coach enters them")
+    df = asyncio.run(pools(p, days, max_matches))
+    out = settings().local("aggregates") / "player_soloq_pool.parquet"
     df.write_parquet(out)
-    typer.echo(f"{df.height} rows -> {out}")
-    typer.echo(df.filter(df["games"] >= MIN_GAMES_TO_SHOW).sort("win_rate", descending=True).head(10))
+    typer.echo(f"{df.height} player-champion rows -> {out}")
 
 
 def _team_roles(team: str) -> list[tuple[str, str, list[tuple[str, int]]]]:

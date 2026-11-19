@@ -98,6 +98,7 @@ class RiotClient:
         self.max_retries = max_retries
         self.limiters: dict[str, RateLimiter] = {}
         self._limits_synced: set[str] = set()
+        self.throttled = 0  # 429 responses seen (should stay ~0: the limiter runs at 90 % of the app limit)
 
     async def __aenter__(self) -> Self:
         return self
@@ -135,6 +136,7 @@ class RiotClient:
             if status == HTTPStatus.NOT_FOUND:
                 return None
             if status == HTTPStatus.TOO_MANY_REQUESTS or status >= HTTPStatus.INTERNAL_SERVER_ERROR:
+                self.throttled += status == HTTPStatus.TOO_MANY_REQUESTS
                 delay = float(r.headers.get("Retry-After", 2**attempt))
                 log.warning("%s %s on %s, sleeping %.1fs", status, host, path.split("/")[3], delay)
                 limiter.blocked_until = time.monotonic() + delay

@@ -271,6 +271,8 @@ After every phase the agent also appends a short entry to `AI_SHOWCASE.md` (what
 
 **Acceptance:** sampler resumes after interruption without duplicate requests; no 429 storms; aggregates for the current patch exist for ≥ 3 regions; unit tests with recorded fixtures (fixtures contain no real personal data).
 
+**Status (2026-11-19):** done. `fele sample-soloq` collected 300+ patch-16.23 matches per region (KR/EUW/NA, 1,069 in total with earlier runs, 205 new timelines, 0 × 429). `fele soloq-aggregate` builds `soloq_champion_patch`, `soloq_matchups` and `soloq_items`. `fele player-soloq` exists but stays off until the coach enters Riot IDs. See `docs/DATA_DICTIONARY.md`.
+
 **🛑 Checkpoint:** human confirms the key handling and data volume.
 
 ---

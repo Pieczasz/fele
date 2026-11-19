@@ -67,7 +67,8 @@ cd web && pnpm dev                 # http://localhost:5173
 | `static` | Champion map (GRID ↔ Data Dragon), attribute tags, patch deltas (`static.*`); see `docs/DATA_DICTIONARY.md` |
 | `fetch-leaguepedia-hf` | CC BY-SA pro pick/ban history, all leagues 2011–2026 (local only) |
 | `riot-check` | Verifies the Riot key and prints its rate limits |
-| `sample-soloq` / `soloq-aggregate` | High-elo solo queue sample (KR/EUW/NA, resumable) → champion × role × patch table |
+| `sample-soloq` / `soloq-aggregate` | High-elo solo queue sample of the live patch (KR/EUW/NA, resumable, 25% with timelines) → champion, matchup and item-build tables |
+| `player-soloq` | Solo-queue champion pools for Riot IDs the coach entered in `config/preferences.yaml` (off by default) |
 | `prefs-init` | Pre-fills `config/preferences.yaml` with Cloud9's latest lineup, inferred roles and top champions |
 | `db` | Builds `data_local/fele.duckdb`: views `grid.*`, `lol.*`, `static.*`, `leaguepedia.*`, `soloq.*`, `aggregates.*` |
 | `serve` | API with Swagger UI at `/docs`, ReDoc at `/redoc`, OpenAPI spec at `/openapi.json` |
