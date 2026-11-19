@@ -7,7 +7,7 @@ import pytest
 from fele import prefs
 from fele.external.soloq import champion_patch_table
 from fele.ingest.grid import read_meta, series_index, series_path
-from fele.static.ddragon import versions_since
+from fele.static.ddragon import live_patch, versions_since
 
 
 def test_versions_since() -> None:
@@ -53,3 +53,11 @@ def test_prefs_fallback_to_example(tmp_path: Path) -> None:
     loaded = prefs.load(tmp_path / "missing.yaml")
     assert loaded.team
     assert json.loads(loaded.model_dump_json())["players"]
+
+
+def test_live_patch(tmp_settings: Path) -> None:
+    assert live_patch() is None
+    dd = tmp_settings / "data_local" / "ddragon"
+    dd.mkdir(parents=True, exist_ok=True)
+    (dd / "versions.json").write_text(json.dumps(["16.23.1", "16.22.1"]))
+    assert live_patch() == "16.23"

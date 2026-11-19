@@ -232,7 +232,11 @@ def replay(series_id: str, path: Path) -> Tables:
     """All rows for one series. Event tables only keep games present in the final state."""
     r = _Replay(series_id)
     final: JsonObj | None = None
-    for _, ev in iter_events(path):
+    envelope: JsonObj | None = None
+    for env, ev in iter_events(path):
+        if env is not envelope:  # GRID sends `destroyed` + `completed destroy*` in one envelope; never carry it over
+            r.pending_structure.clear()
+            envelope = env
         r.handle(ev)
         final = ev.get("seriesState") or final
     out: Tables = {"series": [], "games": [], "draft_actions": [], "participants": []}

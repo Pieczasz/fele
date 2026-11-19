@@ -35,6 +35,14 @@ def patch_of(version: str) -> str:
     return ".".join(version.split(".")[:2])
 
 
+def live_patch() -> str | None:
+    """Newest patch in the cached versions.json (refreshed by `fele fetch-ddragon`), e.g. '16.23'."""
+    path = _cache_dir() / "versions.json"
+    if not path.exists():
+        return None
+    return next((patch_of(v) for v in json.loads(path.read_text()) if v[0].isdigit()), None)
+
+
 def patch_key(patch: str) -> tuple[int, ...]:
     return tuple(int(x) for x in patch.split("."))
 

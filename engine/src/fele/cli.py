@@ -24,6 +24,7 @@ def die(msg: str) -> NoReturn:
 def grid_summary() -> None:
     """Aggregate overview of the local GRID LoL data (counts only, no raw rows)."""
     from fele.ingest.grid import read_meta, series_index
+    from fele.static.ddragon import patch_key
 
     s = settings()
     if not s.lol_dir.exists():
@@ -33,10 +34,8 @@ def grid_summary() -> None:
     c9 = [g for g in games if "Cloud9" in g["team1_name"] + g["team2_name"]]
     numbers = Counter(int(g["game_number"]) for g in games)
     typer.echo(f"series={len(series)} games={len(games)} roster_rows={len(rosters)}")
-    typer.echo(
-        f"patches: {len(patches)} distinct, {min(p for p in patches if p[0].isdigit())} .. "
-        f"{max(patches, key=lambda p: tuple(map(int, p.split('.'))) if p[0].isdigit() else (0,))}"
-    )
+    numeric = sorted((p for p in patches if p[0].isdigit()), key=patch_key)
+    typer.echo(f"patches: {len(patches)} distinct, {numeric[0]} .. {numeric[-1]}")
     typer.echo(f"games by number in series: {dict(sorted(numbers.items()))}")
     typer.echo(f"Cloud9 games: {len(c9)}  events: {sorted(Counter(r['event'] for r in series))[:3]}...")
 
@@ -95,14 +94,6 @@ def riot_check(platform: str = "euw1") -> None:
         typer.echo("Key rejected — development keys expire every 24h; regenerate at developer.riotgames.com")
 
 
-def _live_patch() -> str | None:
-    """Latest patch in the cached Data Dragon versions.json (run `fele fetch-ddragon` to refresh)."""
-    import json
-
-    path = settings().local("ddragon") / "versions.json"
-    return ".".join(json.loads(path.read_text())[0].split(".")[:2]) if path.exists() else None
-
-
 @app.command()
 def sample_soloq(
     platforms: str = "kr,euw1,na1",
@@ -112,30 +103,35 @@ def sample_soloq(
     timeline_share: float = 0.25,
 ) -> None:
     """Sample high-elo ranked solo matches per platform (resumable; cached). Counts only `patch` (default: live)."""
+    from fele.external.riot import RiotClient
     from fele.external.soloq import sample
+    from fele.static.ddragon import live_patch
 
-    target = patch or _live_patch()
+    target = patch or live_patch()
     names = [p.strip() for p in platforms.split(",")]
 
-    async def run() -> list[dict[str, int]]:
-        return await asyncio.gather(
-            *(sample(p, matches, days, patch=target, timeline_share=timeline_share) for p in names)
-        )
+    async def run() -> tuple[list[dict[str, int]], int]:
+        async with RiotClient() as rc:  # one client: platforms share regional rate limits (euw1/eun1 → europe)
+            jobs = (sample(rc, p, matches, days, patch=target, timeline_share=timeline_share) for p in names)
+            return await asyncio.gather(*jobs), rc.throttled
 
-    for p, counts in zip(names, asyncio.run(run()), strict=True):
+    results, throttled = asyncio.run(run())
+    for p, counts in zip(names, results, strict=True):
         typer.echo(f"{p}: {counts} (patch {target})")
+    typer.echo(f"429 responses: {throttled}")
 
 
 @app.command()
 def soloq_aggregate() -> None:
     """Build data_local/aggregates/soloq_{champion_patch,matchups,items}.parquet from sampled matches."""
     from fele.db import build_catalog
-    from fele.external.soloq import champion_patch_table, items_table, matchup_table
+    from fele.external.soloq import champion_patch_table, items_table, matchup_table, sample_rows
 
+    rows = sample_rows()
     tables = {
-        "soloq_champion_patch": champion_patch_table(),
-        "soloq_matchups": matchup_table(),
-        "soloq_items": items_table(),
+        "soloq_champion_patch": champion_patch_table(rows),
+        "soloq_matchups": matchup_table(rows),
+        "soloq_items": items_table(rows),
     }
     if tables["soloq_champion_patch"].is_empty():
         die("No sampled matches yet — run `fele sample-soloq` first")
@@ -183,7 +179,11 @@ def _team_roles(team: str) -> list[tuple[str, str, list[tuple[str, int]]]]:
     out: list[tuple[str, str, list[tuple[str, int]]]] = []
     for p in rows.filter(pl.col("game_id") == latest).iter_rows(named=True):
         mine = rows.filter(pl.col("player_id") == p["player_id"])
-        role = str(mine["inferred_role"].drop_nulls().mode().sort().first())
+        roles = mine["inferred_role"].drop_nulls()
+        if roles.is_empty():  # role inference skipped every game of this player: let the coach fill it in
+            typer.echo(f"{p['player_name']}: no inferred role, left out", err=True)
+            continue
+        role = str(roles.mode().sort().first())
         pool = mine.group_by("champion").len().sort(["len", "champion"], descending=[True, False])
         out.append((p["player_name"].strip(), role, [(c, n) for c, n in pool.rows()]))
     return out

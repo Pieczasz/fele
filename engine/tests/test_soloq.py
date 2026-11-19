@@ -127,9 +127,11 @@ async def test_sample_counts_patch_and_resumes_without_repeat_requests(tmp_setti
     soloq.completed_for_patch.cache_clear()
     routes = _mock_riot({"KR_1": _match("KR_1"), "KR_2": _match("KR_2", "16.22.1.1")})
 
-    stats = await soloq.sample("kr", 5, patch="16.23", timeline_share=1.0)
-    assert stats == {"matches": 2, "on_patch": 1, "timelines": 2, "throttled": 0}
-    again = await soloq.sample("kr", 5, patch="16.23", timeline_share=1.0)
+    async with RiotClient() as rc:
+        stats = await soloq.sample(rc, "kr", 5, patch="16.23", timeline_share=1.0)
+        assert stats == {"matches": 2, "on_patch": 1, "timelines": 2}
+        again = await soloq.sample(rc, "kr", 5, patch="16.23", timeline_share=1.0)
+        assert rc.throttled == 0
     assert again["matches"] == 0
     assert routes["match"].call_count == 2  # second run: everything already sampled
     assert routes["timeline"].call_count == 2
@@ -177,3 +179,10 @@ def test_player_soloq_is_off_by_default():
     example = Path(__file__).parents[2] / "config" / "preferences.example.yaml"
     prefs = Preferences.model_validate(yaml.safe_load(example.read_text()))
     assert not any(p.riot_ids for p in prefs.players)
+
+
+def test_items_table_handles_batches_without_timelines():
+    rows = soloq.participant_rows(_match("M1"), "kr")  # no timeline: core_items all None
+    df = pl.DataFrame(rows, schema_overrides=soloq.ROW_TYPES)
+    assert df.schema["core_items"] == pl.List(pl.Int64)
+    assert soloq.items_table(pl.DataFrame(rows)).is_empty()  # an untyped all-null column doesn't crash either

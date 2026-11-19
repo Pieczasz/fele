@@ -19,16 +19,14 @@ import polars as pl
 from fele.config import settings
 from fele.external.riot import PLATFORM_TO_REGION, RANKED_SOLO_QUEUE, RiotClient
 from fele.jsontypes import JsonObj
+from fele.static.ddragon import patch_of
 
 DEFAULT_TIERS = ("challenger", "grandmaster")
 CORE_ITEMS = 3  # first N completed items = the "build"
 COMPLETED_MIN_GOLD = 1000
 
 type Row = dict[str, Any]
-
-
-def patch_of(game_version: str) -> str:
-    return ".".join(game_version.split(".")[:2])
+ROW_TYPES = {"core_items": pl.List(pl.Int64)}  # all-None when no timeline was sampled → keep the list type
 
 
 def completed_items(item_json: JsonObj) -> set[int]:
@@ -112,16 +110,16 @@ def _sampled(platform: str) -> pl.DataFrame | None:
     return pl.concat([pl.read_parquet(f) for f in files], how="diagonal_relaxed") if files else None
 
 
-def _start_time(platform: str, patch: str | None, days: int) -> int:
-    """Earliest known game of `patch` (≈ its release) if we've seen it, else `days` ago."""
+def _start_time(df: pl.DataFrame | None, patch: str | None, days: int) -> int:
+    """Earliest sampled game of `patch` (≈ its release) if we've seen it, else `days` ago."""
     fallback = int(time.time()) - days * 86400
-    df = _sampled(platform)
     if patch and df is not None and not (seen := df.filter(pl.col("patch") == patch)).is_empty():
         return max(fallback, int(seen["game_start_ms"].min()) // 1000)  # pyright: ignore[reportArgumentType]
     return fallback
 
 
 async def sample(  # noqa: PLR0913 - sampler knobs exposed on the CLI
+    rc: RiotClient,
     platform: str,
     max_matches: int,
     days: int = 14,
@@ -132,43 +130,45 @@ async def sample(  # noqa: PLR0913 - sampler knobs exposed on the CLI
     per_player: int = 20,
     seed: int = 0,
 ) -> dict[str, int]:
-    """Collect up to `max_matches` new ranked matches (on `patch`, if given). Returns counters."""
+    """Collect up to `max_matches` new ranked matches (on `patch`, if given). Returns counters.
+
+    Pass one shared RiotClient for all platforms: rate limits are per routing host, and platforms share regional
+    hosts for match-v5 (euw1 and eun1 both use `europe`).
+    """
     region = PLATFORM_TO_REGION[platform]
     prev = _sampled(platform)
     seen: set[str] = set(prev["match_id"].unique().to_list()) if prev is not None else set()
-    start = _start_time(platform, patch, days)
+    start = _start_time(prev, patch, days)
     rows: list[Row] = []
-    stats = {"matches": 0, "on_patch": 0, "timelines": 0, "throttled": 0}
-    async with RiotClient() as rc:
-        try:
-            puuids = await _apex_puuids(rc, platform, tiers)
-            random.Random(seed).shuffle(puuids)  # noqa: S311 - sampling order, not security
-            for puuid in puuids:
-                if stats["on_patch"] >= max_matches:
-                    break
-                ids = await rc.match_ids(region, puuid, start_time=start, count=per_player) or []
-                new = [i for i in ids if i not in seen]
-                matches = await asyncio.gather(*(rc.match(region, i) for i in new))
-                for mid, m in zip(new, matches, strict=True):
-                    seen.add(mid)
-                    if not m or m["info"].get("queueId") != RANKED_SOLO_QUEUE:
-                        continue
-                    builds = None
-                    if wants_timeline(mid, timeline_share) and (tl := await rc.timeline(region, mid)):
-                        builds = item_order(tl, completed_for_patch(patch_of(m["info"]["gameVersion"])))
-                        stats["timelines"] += 1
-                    rows += participant_rows(m, platform, builds)
-                    stats["matches"] += 1
-                    stats["on_patch"] += patch is None or patch_of(m["info"]["gameVersion"]) == patch
-        finally:
-            stats["throttled"] = rc.throttled
-            if rows:
-                out = settings().local("soloq", platform) / f"batch_{int(time.time())}.parquet"
-                pl.DataFrame(rows, infer_schema_length=None).write_parquet(out)
+    stats = {"matches": 0, "on_patch": 0, "timelines": 0}
+    try:
+        puuids = await _apex_puuids(rc, platform, tiers)
+        random.Random(seed).shuffle(puuids)  # noqa: S311 - sampling order, not security
+        for puuid in puuids:
+            if stats["on_patch"] >= max_matches:
+                break
+            ids = await rc.match_ids(region, puuid, start_time=start, count=per_player) or []
+            new = [i for i in ids if i not in seen]
+            matches = await asyncio.gather(*(rc.match(region, i) for i in new))
+            for mid, m in zip(new, matches, strict=True):
+                seen.add(mid)
+                if not m or m["info"].get("queueId") != RANKED_SOLO_QUEUE:
+                    continue
+                builds = None
+                if wants_timeline(mid, timeline_share) and (tl := await rc.timeline(region, mid)):
+                    builds = item_order(tl, completed_for_patch(patch_of(m["info"]["gameVersion"])))
+                    stats["timelines"] += 1
+                rows += participant_rows(m, platform, builds)
+                stats["matches"] += 1
+                stats["on_patch"] += patch is None or patch_of(m["info"]["gameVersion"]) == patch
+    finally:
+        if rows:
+            out = settings().local("soloq", platform) / f"batch_{int(time.time())}.parquet"
+            pl.DataFrame(rows, infer_schema_length=None, schema_overrides=ROW_TYPES).write_parquet(out)
     return stats
 
 
-def _sample_rows() -> pl.DataFrame:
+def sample_rows() -> pl.DataFrame:
     files = list(settings().local("soloq").glob("*/*.parquet"))
     if not files:
         return pl.DataFrame()
@@ -178,10 +178,10 @@ def _sample_rows() -> pl.DataFrame:
 
 def champion_patch_table(df: pl.DataFrame | None = None) -> pl.DataFrame:
     """Champion x position x patch: games, wins, win rate, pick rate, bans, average game length (all platforms)."""
-    df = _sample_rows() if df is None else df
+    df = sample_rows() if df is None else df
     if df.is_empty():
         return df
-    picks = df.group_by("patch", "champion", "position").agg(
+    picks = df.group_by("patch", "champion", "champion_id", "position").agg(
         games=pl.len(),
         wins=pl.col("win").sum(),
         platforms=pl.col("platform").n_unique(),
@@ -207,7 +207,7 @@ def champion_patch_table(df: pl.DataFrame | None = None) -> pl.DataFrame:
 
 def matchup_table(df: pl.DataFrame | None = None) -> pl.DataFrame:
     """Lane matchups (same position, opposite teams): champion vs opponent x position x patch, games and wins."""
-    df = _sample_rows() if df is None else df
+    df = sample_rows() if df is None else df
     if df.is_empty():
         return df
     lane = df.filter(pl.col("position") != "").select("match_id", "patch", "position", "team_id", "champion", "win")
@@ -225,10 +225,11 @@ def matchup_table(df: pl.DataFrame | None = None) -> pl.DataFrame:
 
 def items_table(df: pl.DataFrame | None = None) -> pl.DataFrame:
     """Most common completed-item orders (first 3) per champion x position x patch, from sampled timelines."""
-    df = _sample_rows() if df is None else df
+    df = sample_rows() if df is None else df
     if df.is_empty() or "core_items" not in df.columns:
         return pl.DataFrame()
-    builds = df.filter(pl.col("core_items").list.len() > 0)
+    items = pl.col("core_items").cast(pl.List(pl.Int64))  # older batches may hold an all-null column
+    builds = df.with_columns(items).filter(items.list.len() > 0)
     return (
         builds.group_by("patch", "champion", "position", "core_items")
         .agg(games=pl.len(), wins=pl.col("win").sum())

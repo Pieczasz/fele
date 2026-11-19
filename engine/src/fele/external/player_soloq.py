@@ -12,8 +12,8 @@ from typing import Any
 import polars as pl
 
 from fele.external.riot import PLATFORM_TO_REGION, RANKED_SOLO_QUEUE, RiotClient
-from fele.external.soloq import patch_of
 from fele.prefs import Preferences
+from fele.static.ddragon import patch_of
 
 type Row = dict[str, Any]
 

@@ -66,8 +66,9 @@ def _final_state():
 
 def _write(path, events):
     with zstd.open(path, "wt", encoding="utf-8") as f:
-        for i, ev in enumerate(events):
-            f.write(json.dumps({"sequenceNumber": i, "occurredAt": "2026-01-01T00:00:00Z", "events": [ev]}) + "\n")
+        for i, ev in enumerate(events):  # a list = several events in one envelope
+            evs = ev if isinstance(ev, list) else [ev]
+            f.write(json.dumps({"sequenceNumber": i, "occurredAt": "2026-01-01T00:00:00Z", "events": evs}) + "\n")
 
 
 def test_replay_synthetic_series(tmp_path):
@@ -93,8 +94,18 @@ def test_replay_synthetic_series(tmp_path):
             target_state=_player("2", RED, 5000, 6000),
             delta={"games": [{"id": GAME, "teams": [{"players": [{"id": "3", "killAssistsGiven": 1}]}]}]},
         ),
-        _ev("destroyed", ("player", "1"), ("tower", "red-turret-top-1"), clock=600),
-        _ev("completed", ("player", "1"), ("destroyTower", "destroyTower"), clock=600, actor_state=_player("1", BLUE)),
+        _ev("destroyed", ("player", "1"), ("tower", "red-turret-mid-1"), clock=500),  # no completed: must not leak
+        [
+            _ev("destroyed", ("player", "1"), ("tower", "red-turret-top-1"), clock=600),
+            _ev(
+                "completed",
+                ("player", "1"),
+                ("destroyTower", "destroyTower"),
+                clock=600,
+                actor_state=_player("1", BLUE),
+            ),
+        ],
+        _ev("completed", ("player", "1"), ("destroyTower", "destroyTower"), clock=650, actor_state=_player("1", BLUE)),
         _ev("completed", ("player", "1"), ("slayDragon", "slayDragon"), clock=700),  # generic duplicate, dropped
         _ev("killed", ("player", "1"), ("player", "2"), game="rolled-back-game"),  # not in the final state
         {**_ev("ended", ("series", "s"), ("game", GAME)), "seriesState": _final_state()},
@@ -107,8 +118,9 @@ def test_replay_synthetic_series(tmp_path):
     assert t["levelups"] == [{"game_id": GAME, "t_s": 100, "player_id": "2", "level": 2, "x": 7000, "y": 7000}]
     (kill,) = t["kills"]
     assert (kill["t_s"], kill["killer_id"], kill["victim_id"], kill["assist_ids"]) == (300, "1", "2", ["3"])
-    (obj,) = t["objectives"]
+    obj, unmatched = t["objectives"]
     assert (obj["kind"], obj["structure_id"], obj["team_id"]) == ("destroyTower", "red-turret-top-1", BLUE)
+    assert unmatched["structure_id"] is None  # a structure from an earlier envelope is never attached
     assert {p["player_id"] for p in t["participants"]} == {"1", "2"}  # benched sub dropped
     assert t["participants"][0]["player_name"] == "p1"
     (game,) = t["games"]

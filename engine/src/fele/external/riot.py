@@ -62,7 +62,9 @@ class RateLimiter:
         self.blocked_until = 0.0
 
     def set_limits(self, limits: Limits) -> None:
-        self.windows = [(max(1, int(n * self.safety)), s, deque[float]()) for n, s in limits]
+        """Replace the windows, keeping the requests already sent (else a mid-window sync would allow a 2nd burst)."""
+        sent = max(self.windows, key=lambda w: w[1])[2] if self.windows else deque[float]()
+        self.windows = [(max(1, int(n * self.safety)), s, deque(sent)) for n, s in limits]
 
     async def acquire(self) -> None:
         async with self.lock:

@@ -4,7 +4,6 @@ Needs `fele ingest` and `fele static` (and optionally `fele soloq-aggregate` for
 Team tables come in two periods: `all` games and `recent` (the last 120 days before `as_of`).
 """
 
-import json
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 
@@ -12,20 +11,15 @@ import polars as pl
 
 from fele.config import settings
 from fele.static.build import read_tags, static_dir
-from fele.static.ddragon import patch_key
+from fele.static.ddragon import live_patch, patch_key
 from fele.stats import data, draft, elo, macro, meta, pools
 
 RECENT_DAYS = 120
 
 
-def _live_patch() -> str | None:
-    path = settings().local("ddragon") / "versions.json"
-    return ".".join(json.loads(path.read_text())[0].split(".")[:2]) if path.exists() else None
-
-
 def _meta_inputs(windows: pl.DataFrame, last_grid: str) -> tuple[pl.DataFrame, pl.DataFrame | None, pl.DataFrame]:
     """Windows incl. `live`, solo-queue rows of the live patch, Data Dragon deltas per window."""
-    live = _live_patch()
+    live = live_patch()
     windows = pl.concat([windows, windows.filter(pl.col("window") == last_grid).with_columns(window=pl.lit("live"))])
     deltas = pl.read_parquet(static_dir() / "patch_deltas.parquet").select("champion", "patch", "score")
     after = [p for p in deltas["patch"].unique().to_list() if patch_key(p) > patch_key(last_grid)]
@@ -44,10 +38,13 @@ def _meta_inputs(windows: pl.DataFrame, last_grid: str) -> tuple[pl.DataFrame, p
     soloq_path = settings().local("aggregates") / "soloq_champion_patch.parquet"
     soloq = None
     if live and soloq_path.exists():
+        # match-v5 championName isn't always the Data Dragon key (e.g. "FiddleSticks"): map by numeric id
+        keys = pl.read_parquet(static_dir() / "champions.parquet").select(champion_id="riot_id", key="champion")
         soloq = (
             pl.read_parquet(soloq_path)
             .filter(pl.col("patch") == live)
-            .group_by("champion")
+            .join(keys, on="champion_id")
+            .group_by(champion="key")
             .agg(pl.col("games").sum(), pl.col("wins").sum())
             .with_columns(window=pl.lit("live"))
         )
@@ -76,7 +73,8 @@ def build(as_of: datetime | None = None) -> dict[str, int]:
     periods = {"all": tg, "recent": tg.filter(pl.col("started_at") >= as_of - timedelta(days=RECENT_DAYS))}
 
     grid_patches = data.patches(ctx)
-    windows, soloq, deltas = _meta_inputs(data.trailing_windows(grid_patches), grid_patches[-1])
+    grid_windows = data.trailing_windows(grid_patches)
+    windows, soloq, deltas = _meta_inputs(grid_windows, grid_patches[-1])
     cmap = pl.read_parquet(static_dir() / "champion_map.parquet")
     meta_table = meta.meta_scores(
         draft_actions, parts, ctx.select("game_id", "patch"), windows, cmap, soloq=soloq, deltas=deltas
@@ -100,7 +98,8 @@ def build(as_of: datetime | None = None) -> dict[str, int]:
 
     tables = {
         "stats_meta": meta_table,
-        "stats_champion_roles": meta.champion_role_winrates(parts_ctx, windows),
+        # grid windows only: the `live` copy of the last window would count its games twice
+        "stats_champion_roles": meta.champion_role_winrates(parts_ctx, grid_windows),
         "stats_player_champions": pc,
         "stats_players": players,
         "stats_team_draft": per_period(draft.team_draft, draft_actions),
