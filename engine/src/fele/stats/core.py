@@ -44,8 +44,8 @@ def fit_beta_prior(k: np.ndarray, n: np.ndarray) -> tuple[float, float]:
         return 2 * mean, 2 * (1 - mean)  # one group: weak prior at its own mean
 
     def nll(log_ab: npt.NDArray[np.float64]) -> float:
-        a, b = math.exp(log_ab[0]), math.exp(log_ab[1])
-        return -float(np.sum(special.betaln(k + a, n - k + b) - special.betaln(a, b)))
+        pa, pb = math.exp(log_ab[0]), math.exp(log_ab[1])
+        return -float(np.sum(special.betaln(k + pa, n - k + pb) - special.betaln(pa, pb)))
 
     start = np.clip(np.log([10 * mean, 10 * (1 - mean)]), *LOG_BOUNDS)  # all-win/all-loss data starts off-bounds
     # Nelder-Mead: L-BFGS-B's finite-difference gradient stalls on this likelihood's flat ridge

@@ -122,8 +122,8 @@ def sample_soloq(
             *(sample(p, matches, days, patch=target, timeline_share=timeline_share) for p in names)
         )
 
-    for p, stats in zip(names, asyncio.run(run()), strict=True):
-        typer.echo(f"{p}: {stats} (patch {target})")
+    for p, counts in zip(names, asyncio.run(run()), strict=True):
+        typer.echo(f"{p}: {counts} (patch {target})")
 
 
 @app.command()
