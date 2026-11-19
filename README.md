@@ -74,6 +74,17 @@ cd web && pnpm dev                 # http://localhost:5173
 | `db` | Builds `data_local/fele.duckdb`: views `grid.*`, `lol.*`, `static.*`, `leaguepedia.*`, `soloq.*`, `aggregates.*` |
 | `serve` | API with Swagger UI at `/docs`, ReDoc at `/redoc`, OpenAPI spec at `/openapi.json` |
 
+### The web app
+
+Pick a team → **Draft** (presence, picks, bans, first rotation and average slot, by side and by game number in the
+series, with league comparison and strong/weak/noise labels; which players opponents ban against), **Players**
+(current lineup, comfort champions, pool size with interval), **Macro** (jungle start side, first objectives vs
+league, objective timings, early-kill heatmap). Plus **Meta** (live patch: pro presence, shrunk pro and solo-queue win
+rates, patch changes) and **Data** (coverage). Every number shows its sample (`7/12`, `n=113`). Light and dark mode.
+
+The API serves only precomputed aggregates (`data_local/aggregates`, `data_local/static`), never raw GRID events.
+Set `DEMO_PASSWORD` in `.env` to put a hosted demo behind a password (HttpOnly session cookie; off when empty).
+
 The web app's TypeScript API client is generated from the OpenAPI spec: `cd web && pnpm gen:api`.
 
 ### Querying the data

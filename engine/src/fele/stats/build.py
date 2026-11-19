@@ -11,6 +11,7 @@ import polars as pl
 
 from fele.config import settings
 from fele.db import write_tables
+from fele.ingest.grid import read_meta
 from fele.static.build import read_tags, static_dir
 from fele.static.ddragon import live_patch, patch_key
 from fele.stats import data, draft, elo, macro, meta, pools
@@ -97,7 +98,10 @@ def build(as_of: datetime | None = None) -> dict[str, int]:
             ]
         )
 
+    names = pl.DataFrame(read_meta("teams")).select("team_id", "name")
     tables = {
+        "stats_teams": data.team_summary(tg, names),
+        "stats_windows": windows,
         "stats_meta": meta_table,
         # grid windows only: the `live` copy of the last window would count its games twice
         "stats_champion_roles": meta.champion_role_winrates(parts_ctx, grid_windows),

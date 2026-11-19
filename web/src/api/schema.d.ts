@@ -21,6 +21,171 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/info": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Data Dragon version, live patch, whether a login is needed */
+        get: operations["info_info_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Unlock the hosted demo */
+        post: operations["login_login_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** End the demo session */
+        post: operations["logout_logout_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Teams with games in the data */
+        get: operations["teams_teams_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{team_id}/scouting": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Draft priorities and who opponents ban against
+         * @description Presence (picked or banned by the team) per champion, overall and by side and game number in the series.
+         */
+        get: operations["scouting_teams__team_id__scouting_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{team_id}/macro": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Jungle starts, first objectives, timings, early kills
+         * @description Positions are event-time snapshots and the feed has no normal camp events (see docs/METHODOLOGY.md).
+         */
+        get: operations["macro_teams__team_id__macro_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{team_id}/players": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Player champion pools and comfort
+         * @description Players whose latest game was for this team, with their most comfortable champions (pro games).
+         */
+        get: operations["players_teams__team_id__players_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/meta": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Champion meta score per patch window
+         * @description Pro presence, shrunk pro and solo-queue win rates and the patch delta, combined into one documented score.
+         */
+        get: operations["meta_meta_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/coverage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** How much data is behind the numbers */
+        get: operations["coverage_coverage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/preferences": {
         parameters: {
             query?: never;
@@ -45,6 +210,20 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** Body_login_login_post */
+        Body_login_login_post: {
+            /** Password */
+            password: string;
+        };
+        /** ChampionCount */
+        ChampionCount: {
+            /** Champion */
+            champion: string;
+            /** Key */
+            key: string | null;
+            /** Count */
+            count: number;
+        };
         /** ChampionNote */
         ChampionNote: {
             /** Champion */
@@ -62,6 +241,58 @@ export interface components {
          * @enum {string}
          */
         Comfort: "signature" | "comfortable" | "playable" | "learning" | "refuses";
+        /** Coverage */
+        Coverage: {
+            /** Leagues */
+            leagues: components["schemas"]["LeagueCoverage"][];
+            /** Soloq */
+            soloq: components["schemas"]["SoloqCoverage"][];
+            /** Teams */
+            teams: components["schemas"]["Team"][];
+        };
+        /** DraftRow */
+        DraftRow: {
+            /** K */
+            k: number;
+            /** N */
+            n: number;
+            /** Rate */
+            rate: number | null;
+            /** Lo */
+            lo: number | null;
+            /** Hi */
+            hi: number | null;
+            /** Champion */
+            champion: string;
+            /** Key */
+            key: string | null;
+            /**
+             * Split Type
+             * @enum {string}
+             */
+            split_type: "all" | "side" | "game_bucket";
+            /** Split */
+            split: string;
+            /** Picks */
+            picks: number;
+            /** Bans */
+            bans: number;
+            /** Base Rate */
+            base_rate: number;
+            first_rotation: components["schemas"]["Rate"];
+            /** Avg Slot */
+            avg_slot: number | null;
+            /**
+             * Tendency
+             * @enum {string}
+             */
+            tendency: "strong" | "weak" | "noise";
+        };
+        /** HTTPValidationError */
+        HTTPValidationError: {
+            /** Detail */
+            detail?: components["schemas"]["ValidationError"][];
+        };
         /** Health */
         Health: {
             /**
@@ -71,6 +302,221 @@ export interface components {
             status: "ok";
             /** Service */
             service: string;
+        };
+        /** Info */
+        Info: {
+            /** Ddragon Version */
+            ddragon_version: string | null;
+            /** Live Patch */
+            live_patch: string | null;
+            /** Demo Protected */
+            demo_protected: boolean;
+        };
+        /** KillCell */
+        KillCell: {
+            /**
+             * Side
+             * @enum {string}
+             */
+            side: "blue" | "red";
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "kill" | "death";
+            /** Cx */
+            cx: number;
+            /** Cy */
+            cy: number;
+            /** Count */
+            count: number;
+        };
+        /** LeagueCoverage */
+        LeagueCoverage: {
+            /** League */
+            league: string;
+            /** Teams */
+            teams: number;
+            /** Games */
+            games: number;
+            /**
+             * First Game
+             * Format: date-time
+             */
+            first_game: string;
+            /**
+             * Last Game
+             * Format: date-time
+             */
+            last_game: string;
+        };
+        /** Macro */
+        Macro: {
+            team: components["schemas"]["Team"];
+            /**
+             * Period
+             * @enum {string}
+             */
+            period: "recent" | "all";
+            /** Games */
+            games: number;
+            /** Rates */
+            rates: components["schemas"]["MacroRate"][];
+            /** Timings */
+            timings: components["schemas"]["MacroTiming"][];
+            /** Early Kills */
+            early_kills: components["schemas"]["KillCell"][];
+            /** Games By Side */
+            games_by_side: {
+                [key: string]: number;
+            };
+        };
+        /** MacroRate */
+        MacroRate: {
+            /** K */
+            k: number;
+            /** N */
+            n: number;
+            /** Rate */
+            rate: number | null;
+            /** Lo */
+            lo: number | null;
+            /** Hi */
+            hi: number | null;
+            /** Metric */
+            metric: string;
+            /** Split */
+            split: string;
+            /** Base Rate */
+            base_rate: number;
+            /**
+             * Tendency
+             * @enum {string}
+             */
+            tendency: "strong" | "weak" | "noise";
+        };
+        /** MacroTiming */
+        MacroTiming: {
+            /** Metric */
+            metric: string;
+            /** N */
+            n: number;
+            /** Median S */
+            median_s: number;
+            /** Q25 S */
+            q25_s: number;
+            /** Q75 S */
+            q75_s: number;
+        };
+        /** Meta */
+        Meta: {
+            /** Window */
+            window: string;
+            /** Windows */
+            windows: string[];
+            /** Patches */
+            patches: string[];
+            /** Live Patch */
+            live_patch: string | null;
+            /** Rows */
+            rows: components["schemas"]["MetaRow"][];
+        };
+        /** MetaRow */
+        MetaRow: {
+            /** Champion */
+            champion: string;
+            /** Name */
+            name: string | null;
+            /** Roles */
+            roles: string[];
+            presence: components["schemas"]["Rate"];
+            /** Picks */
+            picks: number;
+            /** Bans */
+            bans: number;
+            /** Pro N */
+            pro_n: number | null;
+            /** Pro Wr */
+            pro_wr: number | null;
+            /** Pro Wr Lo */
+            pro_wr_lo: number | null;
+            /** Pro Wr Hi */
+            pro_wr_hi: number | null;
+            /** Soloq N */
+            soloq_n: number | null;
+            /** Soloq Wr */
+            soloq_wr: number | null;
+            /** Soloq Wr Lo */
+            soloq_wr_lo: number | null;
+            /** Soloq Wr Hi */
+            soloq_wr_hi: number | null;
+            /** Delta */
+            delta: number | null;
+            /** Meta Score */
+            meta_score: number;
+        };
+        /** Player */
+        Player: {
+            /** Player Id */
+            player_id: string;
+            /** Name */
+            name: string;
+            /** Role */
+            role: string;
+            /** Current */
+            current: boolean;
+            /**
+             * Last Game
+             * Format: date-time
+             */
+            last_game: string;
+            /** N */
+            n: number;
+            /** Unique Champions */
+            unique_champions: number;
+            /** Effective Pool */
+            effective_pool: number;
+            /** Effective Pool Lo */
+            effective_pool_lo: number;
+            /** Effective Pool Hi */
+            effective_pool_hi: number;
+            /** Depth */
+            depth: number;
+            meta_overlap: components["schemas"]["Rate"];
+            /** Champions */
+            champions: components["schemas"]["PlayerChampion"][];
+        };
+        /** PlayerChampion */
+        PlayerChampion: {
+            /** K */
+            k: number;
+            /** N */
+            n: number;
+            /** Rate */
+            rate: number | null;
+            /** Lo */
+            lo: number | null;
+            /** Hi */
+            hi: number | null;
+            /** Champion */
+            champion: string;
+            /** Key */
+            key: string | null;
+            /** Shrunk */
+            shrunk: number;
+            /** Shrunk Lo */
+            shrunk_lo: number;
+            /** Shrunk Hi */
+            shrunk_hi: number;
+            /** Recent Games */
+            recent_games: number;
+            /** Comfort */
+            comfort: number;
+            /**
+             * Last Played
+             * Format: date-time
+             */
+            last_played: string;
         };
         /** PlayerPrefs */
         PlayerPrefs: {
@@ -95,6 +541,12 @@ export interface components {
              */
             wants_prio: boolean;
         };
+        /** Players */
+        Players: {
+            team: components["schemas"]["Team"];
+            /** Players */
+            players: components["schemas"]["Player"][];
+        };
         /** Preferences */
         Preferences: {
             /** Team */
@@ -118,10 +570,41 @@ export interface components {
             weight: number;
         };
         /**
+         * Rate
+         * @description k successes out of n, rate = k / n, Wilson 95% interval.
+         */
+        Rate: {
+            /** K */
+            k: number;
+            /** N */
+            n: number;
+            /** Rate */
+            rate: number | null;
+            /** Lo */
+            lo: number | null;
+            /** Hi */
+            hi: number | null;
+        };
+        /**
          * Role
          * @enum {string}
          */
         Role: "top" | "jungle" | "mid" | "bot" | "support";
+        /** Scouting */
+        Scouting: {
+            team: components["schemas"]["Team"];
+            /**
+             * Period
+             * @enum {string}
+             */
+            period: "recent" | "all";
+            /** Games */
+            games: number;
+            /** Draft */
+            draft: components["schemas"]["DraftRow"][];
+            /** Targeted Players */
+            targeted_players: components["schemas"]["TargetedPlayer"][];
+        };
         /** SeriesStrategy */
         SeriesStrategy: {
             /**
@@ -143,6 +626,73 @@ export interface components {
              * @description e.g. early, teamfight, pick, scaling
              */
             style_tags?: string[];
+        };
+        /** SoloqCoverage */
+        SoloqCoverage: {
+            /** Patch */
+            patch: string;
+            /** Matches */
+            matches: number;
+        };
+        /**
+         * TargetedPlayer
+         * @description Opponents' bans that hit this player's earlier pro pool: k of the n bans the team faced.
+         */
+        TargetedPlayer: {
+            /** K */
+            k: number;
+            /** N */
+            n: number;
+            /** Rate */
+            rate: number | null;
+            /** Lo */
+            lo: number | null;
+            /** Hi */
+            hi: number | null;
+            /** Player */
+            player: string;
+            /** Role */
+            role: string | null;
+            /** Champions */
+            champions: components["schemas"]["ChampionCount"][];
+        };
+        /** Team */
+        Team: {
+            /** Team Id */
+            team_id: string;
+            /** Name */
+            name: string;
+            /** League */
+            league: string;
+            /** Games */
+            games: number;
+            /** Wins */
+            wins: number;
+            /** Series */
+            series: number;
+            /**
+             * First Game
+             * Format: date-time
+             */
+            first_game: string;
+            /**
+             * Last Game
+             * Format: date-time
+             */
+            last_game: string;
+        };
+        /** ValidationError */
+        ValidationError: {
+            /** Location */
+            loc: (string | number)[];
+            /** Message */
+            msg: string;
+            /** Error Type */
+            type: string;
+            /** Input */
+            input?: unknown;
+            /** Context */
+            ctx?: Record<string, never>;
         };
     };
     responses: never;
@@ -169,6 +719,244 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Health"];
+                };
+            };
+        };
+    };
+    info_info_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Info"];
+                };
+            };
+        };
+    };
+    login_login_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Body_login_login_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    logout_logout_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    teams_teams_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Team"][];
+                };
+            };
+        };
+    };
+    scouting_teams__team_id__scouting_get: {
+        parameters: {
+            query?: {
+                period?: "recent" | "all";
+            };
+            header?: never;
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Scouting"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    macro_teams__team_id__macro_get: {
+        parameters: {
+            query?: {
+                period?: "recent" | "all";
+            };
+            header?: never;
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Macro"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    players_teams__team_id__players_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Players"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    meta_meta_get: {
+        parameters: {
+            query?: {
+                /** @description `live` or a GRID patch such as 16.17 */
+                window?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Meta"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    coverage_coverage_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Coverage"];
                 };
             };
         };

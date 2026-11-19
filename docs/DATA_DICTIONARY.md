@@ -205,6 +205,8 @@ tendencies add `base_rate`, `p`, `q`, `tendency` (strong / weak / noise). Team t
 
 | Table | Grain |
 |---|---|
+| `stats_teams` | team: name, league (where it played most), games, wins, series, first/last game |
+| `stats_windows` | patch window → GRID patches it covers (`live` = the latest window) |
 | `stats_team_draft` | period × team × champion × split (`all`, `side`, `game_bucket` G1/G2/G3+): presence, picks, bans, first rotation, avg slot |
 | `stats_bans` | one row per ban, with the targeted opponent player (from games before it) |
 | `stats_ban_targets` | period × targeted team × player: bans aimed at the player out of bans faced |

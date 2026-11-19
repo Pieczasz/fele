@@ -4,10 +4,14 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router'
 import { App } from './App.tsx'
 import './index.css'
+import { applyTheme, initialTheme } from './theme.ts'
 
-if (globalThis.matchMedia('(prefers-color-scheme: dark)').matches) {
-  document.documentElement.classList.add('dark')
-}
+applyTheme(initialTheme())
+
+// aggregates change only when `fele stats` reruns: no refetching on every focus
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { staleTime: 5 * 60_000, refetchOnWindowFocus: false } },
+})
 
 const root = document.querySelector('#root')
 if (!root) {
@@ -16,7 +20,7 @@ if (!root) {
 
 createRoot(root).render(
   <StrictMode>
-    <QueryClientProvider client={new QueryClient()}>
+    <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <App />
       </BrowserRouter>

@@ -95,6 +95,7 @@
       },
       "preset": "recommended",
       "performance": {
+        "noJsxPropsBind": "off",
         "useTopLevelRegex": "error",
         "noAccumulatingSpread": "error",
         "noBarrelFile": "error"

@@ -1,82 +1,92 @@
 import { useQuery } from '@tanstack/react-query'
-import { NavLink, Route, Routes } from 'react-router'
-import { api } from './api/client.ts'
+import { useId, useState } from 'react'
+import { Link, Navigate, NavLink, Route, Routes } from 'react-router'
+import { api, LoginRequiredError } from './api/client.ts'
 import { Footer } from './components/Footer.tsx'
+import { Login } from './components/Login.tsx'
+import { CoveragePage } from './pages/CoveragePage.tsx'
+import { MacroPage } from './pages/MacroPage.tsx'
+import { MetaPage } from './pages/MetaPage.tsx'
+import { PlayersPage } from './pages/PlayersPage.tsx'
+import { ScoutingPage } from './pages/ScoutingPage.tsx'
+import { TeamLayout } from './pages/TeamLayout.tsx'
+import { TeamsPage } from './pages/TeamsPage.tsx'
+import { applyTheme, initialTheme, type Theme } from './theme.ts'
 
-const navClass = ({ isActive }: { isActive: boolean }) => (isActive ? 'font-semibold' : 'text-slate-500')
+const NAV = [
+  ['/', 'Teams'],
+  ['/meta', 'Meta'],
+  ['/coverage', 'Data'],
+] as const
 
-function Status() {
-  const health = useQuery({ queryKey: ['health'], queryFn: api.health })
-  let healthText = 'checking…'
-  if (health.isError) {
-    healthText = `unreachable (${health.error.message})`
-  } else if (health.isSuccess) {
-    healthText = health.data.status
-  }
-  const prefs = useQuery({ queryKey: ['preferences'], queryFn: api.preferences })
+function ThemeToggle() {
+  const [theme, setTheme] = useState<Theme>(initialTheme)
   return (
-    <section className="space-y-4">
-      <h2 className="text-lg font-semibold">Engine status</h2>
-      <p data-testid="health">API: {healthText}</p>
-      {prefs.data ? (
-        <div>
-          <h3 className="font-medium">{prefs.data.team} — coach preferences</h3>
-          <ul className="mt-2 grid gap-2 sm:grid-cols-5">
-            {prefs.data.players.map((p) => (
-              <li key={p.name} className="rounded border border-slate-200 p-2 text-sm dark:border-slate-800">
-                <span className="font-medium">{p.name}</span> <span className="text-slate-500">{p.role}</span>
-                <ul className="mt-1 text-xs">
-                  {(p.pool ?? []).map((c) => (
-                    <li key={c.champion}>
-                      {c.champion} · {c.comfort}
-                    </li>
-                  ))}
-                </ul>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-    </section>
+    <button
+      type="button"
+      aria-pressed={theme === 'dark'}
+      onClick={() => {
+        const next: Theme = theme === 'dark' ? 'light' : 'dark'
+        applyTheme(next, true)
+        setTheme(next)
+      }}
+      className="min-h-9 cursor-pointer rounded-md border border-line px-3 text-sm text-muted hover:text-ink"
+    >
+      Dark theme
+    </button>
   )
 }
 
-const Placeholder = ({ title }: { title: string }) => (
-  <section>
-    <h2 className="text-lg font-semibold">{title}</h2>
-    <p className="text-slate-500">Coming in a later phase.</p>
-  </section>
-)
-
-const NAV = [
-  ['/', 'Status'],
-  ['/scouting', 'Scouting'],
-  ['/meta', 'Meta'],
-  ['/planner', 'Series planner'],
-  ['/draft', 'Mock draft'],
-] as const
-
 export function App() {
+  const teams = useQuery({ queryKey: ['teams'], queryFn: api.teams, retry: false })
+  const needsLogin = teams.error instanceof LoginRequiredError
+  const mainId = useId()
   return (
-    <div className="flex min-h-screen flex-col bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-100">
-      <header className="flex items-center gap-6 border-b border-slate-200 px-6 py-3 dark:border-slate-800">
-        <h1 className="font-bold">fele</h1>
-        <nav className="flex gap-4 text-sm">
-          {NAV.map(([to, label]) => (
-            <NavLink key={to} to={to} className={navClass}>
-              {label}
-            </NavLink>
-          ))}
-        </nav>
+    <div className="flex min-h-screen flex-col bg-bg text-ink">
+      <a href={`#${mainId}`} className="sr-only focus:not-sr-only focus:absolute focus:p-2">
+        Skip to content
+      </a>
+      <header className="border-b border-line bg-surface">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 sm:px-6">
+          <Link to="/" className="text-lg font-bold tracking-tight">
+            fele <span className="text-sm font-normal text-muted">Fearless Ledger</span>
+          </Link>
+          <nav aria-label="Main" className="flex gap-1 text-sm">
+            {NAV.map(([to, label]) => (
+              <NavLink
+                key={to}
+                to={to}
+                end={to === '/'}
+                className={({ isActive }) =>
+                  `rounded-md px-3 py-1.5 ${isActive ? 'bg-primary-soft font-semibold text-ink' : 'text-muted hover:text-ink'}`
+                }
+              >
+                {label}
+              </NavLink>
+            ))}
+          </nav>
+          <div className="ml-auto">
+            <ThemeToggle />
+          </div>
+        </div>
       </header>
-      <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-6">
-        <Routes>
-          <Route path="/" element={<Status />} />
-          <Route path="/scouting" element={<Placeholder title="Opponent scouting" />} />
-          <Route path="/meta" element={<Placeholder title="Meta & patch" />} />
-          <Route path="/planner" element={<Placeholder title="Fearless series planner" />} />
-          <Route path="/draft" element={<Placeholder title="Mock draft" />} />
-        </Routes>
+      <main id={mainId} className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6">
+        {needsLogin ? (
+          <Login />
+        ) : (
+          <Routes>
+            <Route path="/" element={<TeamsPage />} />
+            <Route path="/teams/:teamId" element={<TeamLayout />}>
+              <Route index={true} element={<Navigate to="scouting" replace={true} />} />
+              <Route path="scouting" element={<ScoutingPage />} />
+              <Route path="players" element={<PlayersPage />} />
+              <Route path="macro" element={<MacroPage />} />
+            </Route>
+            <Route path="/meta" element={<MetaPage />} />
+            <Route path="/coverage" element={<CoveragePage />} />
+            <Route path="*" element={<p className="text-muted">Page not found.</p>} />
+          </Routes>
+        )}
       </main>
       <Footer />
     </div>

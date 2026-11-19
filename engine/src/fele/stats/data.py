@@ -50,6 +50,25 @@ def team_games(ctx: pl.DataFrame) -> pl.DataFrame:
     ).drop("blue_team_id", "red_team_id", "winner_team_id")
 
 
+def team_summary(tg: pl.DataFrame, names: pl.DataFrame) -> pl.DataFrame:
+    """One row per team: name, league (where it played most), games, wins, series, first/last game."""
+    league = tg.group_by("team_id").agg(pl.col("league").mode().sort().first())
+    return (
+        tg.group_by("team_id")
+        .agg(
+            games=pl.len(),
+            wins=pl.col("win").sum(),
+            series=pl.col("series_id").n_unique(),
+            first_game=pl.col("started_at").min(),
+            last_game=pl.col("started_at").max(),
+        )
+        .join(league, on="team_id")
+        .join(names, on="team_id", how="left")
+        .with_columns(pl.col("name").fill_null(pl.col("team_id")))
+        .sort("league", "games", descending=[False, True])
+    )
+
+
 def patches(ctx: pl.DataFrame) -> list[str]:
     """GRID patches, oldest first."""
     return sorted(ctx["patch"].drop_nulls().unique().to_list(), key=patch_key)

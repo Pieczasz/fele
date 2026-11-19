@@ -311,6 +311,8 @@ After every phase the agent also appends a short entry to `AI_SHOWCASE.md` (what
 
 **Acceptance:** report for Cloud9's most frequent opponent loads in < 1 s locally; every number has n; Lighthouse accessibility ≥ 90.
 
+**Status (2026-11-19):** done. API (`/teams`, `/teams/{id}/scouting|players|macro`, `/meta`, `/coverage`, `/info`, `/login`) serves aggregates only; web pages Teams → Draft / Players / Macro, Meta, Data. Cloud9's most frequent opponent (FlyQuest) renders in ~330 ms on the dev server (API 3–20 ms); Lighthouse accessibility 100. `DEMO_PASSWORD` gate with HttpOnly HMAC cookie.
+
 **🛑 Checkpoint:** human records a 30-second screen capture and, if possible, asks for feedback in Cloud9 Discord office hours.
 
 ---

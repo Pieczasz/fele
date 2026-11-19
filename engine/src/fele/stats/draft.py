@@ -83,7 +83,12 @@ def ban_targeting_by_player(bans: pl.DataFrame) -> pl.DataFrame:
     faced = bans.group_by(pl.col("opponent_id").alias("team_id")).agg(n=pl.len())
     k = (
         bans.drop_nulls("target_player_id")
-        .group_by(pl.col("opponent_id").alias("team_id"), "target_player_id", "target_player", "target_role")
-        .agg(k=pl.len(), champions=pl.col("champion").value_counts(sort=True).head(5))
+        .group_by(pl.col("opponent_id").alias("team_id"), "target_player_id")
+        .agg(
+            k=pl.len(),
+            target_player=pl.col("target_player").mode().sort().first(),
+            target_role=pl.col("target_role").drop_nulls().mode().sort().first(),  # one row per player
+            champions=pl.col("champion").value_counts(sort=True).head(5),
+        )
     )
     return with_rate(k.join(faced, on="team_id")).sort("team_id", "k", descending=[False, True])

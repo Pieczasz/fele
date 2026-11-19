@@ -124,3 +124,23 @@ One entry per phase of [AGENT_PLAN.md](AGENT_PLAN.md): what was asked, what the 
   - GRID ends at 16.17 while the solo-queue sample is 16.23, so they never shared a window → a `live` window joins
     the latest pro window with the live solo-queue sample and the Data Dragon changes since.
 - **Human corrections:** _(fill in at checkpoint: sanity-check the numbers against LoL knowledge)_
+
+### Phase 6 — First dashboard (2026-11-19)
+
+- **Asked:** "continue with phase 6": API over the aggregates, a coach-facing web app (team picker, scouting, player
+  pools, macro with heatmap, meta, coverage), evidence badges everywhere, demo password, dark and light mode.
+- **Agent produced:** FastAPI endpoints with typed response models (every rate carries k, n and its interval), an
+  mtime-keyed Parquet cache, a constant-time password gate with an HttpOnly HMAC cookie, and React pages built on
+  shared `RateBar` / `NBadge` / `TendencyBadge` components. Data Dragon icons and map, the light/dark toggle and the
+  Riot boilerplate are included. API tests use synthetic aggregates and the web tests use a fake API.
+- **Checked in a real browser (Chrome DevTools):** FlyQuest (Cloud9's most frequent opponent) shows its full report
+  in ~330 ms on the dev server; Lighthouse accessibility 100, best practices 96.
+- **Caught along the way:**
+  - React flagged a duplicate key: a player appeared once per inferred role in the "players opponents ban against"
+    list. Fixed in the stats table (one row per player, most common role), not hidden in the UI.
+  - The players page listed everyone whose latest game was for the team, so FlyQuest showed two top laners. The
+    API now marks the current lineup (played within a week of the team's last game) and the page shows earlier
+    players separately.
+  - In the last 120 days some teams have only a couple of games, so the report shows the games behind each
+    period.
+- **Human corrections:** _(fill in at checkpoint: 30-second screen capture, Cloud9 office-hours feedback)_
