@@ -1,0 +1,52 @@
+# Coach & player preferences — the knowledge the data can't see.
+# Copy to config/preferences.yaml (gitignored) and edit. `fele prefs-init` pre-fills
+# the current roster from the local GRID data.
+#
+# comfort: signature | comfortable | playable | learning | refuses
+team: Cloud9 Kia
+weight: 0.5          # 0 = recommendations ignore this file, 1 = coach input dominates
+
+players:
+  - name: TopLaner
+    role: top
+    riot_ids: []     # e.g. "GameName#TAG@na1" — only accounts the player publicly shares / agrees to
+    wants_prio: false
+    pool:
+      - {champion: K'Sante, comfort: signature, note: "blind-pickable"}
+      - {champion: Rumble, comfort: comfortable}
+      - {champion: Yone, comfort: refuses, note: "doesn't like the matchup spread"}
+    hates_playing_against: [Jayce]
+
+  - name: Jungler
+    role: jungle
+    wants_prio: true
+    pool:
+      - {champion: Xin Zhao, comfort: signature}
+      - {champion: Vi, comfort: comfortable}
+    hates_playing_against: []
+
+  - name: MidLaner
+    role: mid
+    pool:
+      - {champion: Azir, comfort: signature}
+      - {champion: Taliyah, comfort: playable}
+
+  - name: BotLaner
+    role: bot
+    wants_prio: true
+    pool:
+      - {champion: Kai'Sa, comfort: signature}
+      - {champion: Varus, comfort: comfortable}
+
+  - name: Support
+    role: support
+    pool:
+      - {champion: Rell, comfort: signature}
+      - {champion: Nautilus, comfort: comfortable}
+
+strategy:
+  save_for_late_games: [Azir]          # Fearless: keep for G3+ if possible
+  must_ban_vs_opponent:
+    "Team Liquid": [Kalista]
+  never_pick: []
+  style_tags: [early, skirmish]

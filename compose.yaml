@@ -1,0 +1,54 @@
+name: fele
+
+# fele local stack.
+#   docker compose up --build                     → web on http://localhost:8080, API on http://localhost:8000/docs
+#   docker compose run --rm fele fetch-ddragon    → any `fele` CLI command (ingest, sampling, db, ...)
+#   docker compose --profile qodana run --rm qodana  → JetBrains Qodana scan, report in ./scratch/qodana
+#
+# Data stays on the host: the GRID clone is mounted read-only, derived data lives in ./data_local.
+# DuckDB is embedded (a file in ./data_local), so there is no database server to run.
+
+x-engine: &engine
+  build: ./engine
+  env_file:
+    - path: .env
+      required: false
+  environment:
+    STL_DATA_DIR: /grid
+    FELE_DATA_DIR: /data
+    FELE_CONFIG_DIR: /config
+  volumes:
+    - ${STL_DATA_HOST_DIR:-../stl-hackathon-2026-grid-starter}:/grid:ro
+    - ./data_local:/data
+    - ./config:/config
+
+services:
+  api:
+    <<: *engine
+    ports: ["8000:8000"]
+
+  web:
+    build: ./web
+    ports: ["8080:80"]
+    depends_on:
+      api:
+        condition: service_healthy
+
+  fele:
+    <<: *engine
+    profiles: [cli]
+    entrypoint: ["fele"]
+    command: ["--help"]
+
+  qodana:
+    image: jetbrains/qodana-python-community:2026.2
+    profiles: [qodana]
+    volumes:
+      - ./:/data/project
+      - ./scratch/qodana:/data/results
+      - qodana-cache:/data/cache
+    environment:
+      QODANA_PYTHON_PATH: /data/cache/fele-venv/bin/python
+
+volumes:
+  qodana-cache:

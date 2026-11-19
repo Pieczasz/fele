@@ -1,0 +1,32 @@
+name: Qodana
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  qodana:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      checks: write
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - name: Qodana scan (Community for Python, no token needed)
+        uses: JetBrains/qodana-action@v2026.2
+        env:
+          QODANA_PYTHON_PATH: /data/cache/fele-venv/bin/python  # 3.14 env built by qodana.yaml bootstrap
+        with:
+          env-vars-to-linter: QODANA_PYTHON_PATH
+          upload-result: true
+      - name: Publish to GitHub code scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: ${{ runner.temp }}/qodana/results/qodana.sarif.json
