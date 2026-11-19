@@ -21,11 +21,10 @@ def team_draft(draft: pl.DataFrame, tg: pl.DataFrame) -> pl.DataFrame:
     """
     keyed = tg.select("game_id", "team_id", "side", "game_bucket").join(team_league(tg), on="team_id")
     d = draft.join(keyed, on=["game_id", "team_id"])
-    games = keyed
     frames: list[pl.DataFrame] = []
     for split in SPLITS:
         s = [split] if split else []
-        n = games.group_by("team_id", *s).agg(n=pl.len())
+        n = keyed.group_by("team_id", *s).agg(n=pl.len())
         agg = d.group_by("team_id", "league", *s, "champion").agg(
             picks=(pl.col("action") == "pick").sum(),
             bans=(pl.col("action") == "ban").sum(),
@@ -33,7 +32,7 @@ def team_draft(draft: pl.DataFrame, tg: pl.DataFrame) -> pl.DataFrame:
             first_rotation=pl.col("game_id").filter(pl.col("phase").is_in(FIRST_ROTATION)).n_unique(),
             avg_slot=pl.col("slot").mean(),
         )
-        league_n = games.group_by("league", *s).agg(league_n=pl.len())
+        league_n = keyed.group_by("league", *s).agg(league_n=pl.len())
         league_k = d.group_by("league", *s, "champion").agg(league_k=pl.struct("game_id", "team_id").n_unique())
         base = league_k.join(league_n, on=["league", *s]).with_columns(
             base_rate=pl.col("league_k") / pl.col("league_n")

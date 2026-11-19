@@ -22,8 +22,12 @@ FIRSTS = {
 }
 
 
-def _half(x: str = "x", y: str = "y") -> pl.Expr:
-    return pl.when(pl.col(y) > pl.col(x)).then(pl.lit("top")).otherwise(pl.lit("bot"))
+HALF = pl.when(pl.col("y") > pl.col("x")).then(pl.lit("top")).otherwise(pl.lit("bot"))
+
+
+def _first_per_game(df: pl.DataFrame) -> pl.DataFrame:
+    """The earliest row of each game."""
+    return df.sort("t_s").unique("game_id", keep="first")
 
 
 def team_game_macro(
@@ -34,9 +38,9 @@ def team_game_macro(
     lv = levelups.join(jungler, on=["game_id", "player_id"])
     start = (
         lv.filter(pl.col("level") == 2)  # noqa: PLR2004
-        .select("game_id", "team_id", jungle_l2_s="t_s", jungle_start=_half())
+        .select("game_id", "team_id", jungle_l2_s="t_s", jungle_start=HALF)
         .join(
-            lv.filter(pl.col("level") == 3).select("game_id", "team_id", jungle_l3_side=_half()),  # noqa: PLR2004
+            lv.filter(pl.col("level") == 3).select("game_id", "team_id", jungle_l3_side=HALF),  # noqa: PLR2004
             on=["game_id", "team_id"],
             how="left",
         )
@@ -47,24 +51,15 @@ def team_game_macro(
     for name, cond in FIRSTS.items():
         ev = objectives.filter(cond)
         mine = ev.group_by("game_id", "team_id").agg(pl.col("t_s").min().alias(f"{name}_s"))
-        game_first = (
-            ev.sort("t_s")
-            .unique("game_id", keep="first")
-            .select("game_id", pl.col("team_id").alias(f"first_{name}_team"))
-        )
+        game_first = _first_per_game(ev).select("game_id", pl.col("team_id").alias(f"first_{name}_team"))
         out = out.join(mine, on=["game_id", "team_id"], how="left").join(game_first, on="game_id", how="left")
-        out = out.with_columns(
-            pl.when(pl.col(f"first_{name}_team").is_not_null())
-            .then(pl.col(f"first_{name}_team") == pl.col("team_id"))
-            .alias(f"got_first_{name}")
-        ).drop(f"first_{name}_team")
-    first_scuttle = (
-        objectives.filter(FIRSTS["scuttle"])
-        .sort("t_s")
-        .unique("game_id", keep="first")
-        .select("game_id", first_scuttle_side=pl.col("kind").str.strip_prefix("slayRiftScuttler").str.to_lowercase())
+        got = (pl.col(f"first_{name}_team") == pl.col("team_id")).alias(f"got_first_{name}")  # null if nobody did
+        out = out.with_columns(got).drop(f"first_{name}_team")
+    scuttle_side = pl.col("kind").str.strip_prefix("slayRiftScuttler").str.to_lowercase()
+    first_scuttle = _first_per_game(objectives.filter(FIRSTS["scuttle"])).select(
+        "game_id", first_scuttle_side=scuttle_side
     )
-    blood = kills.sort("t_s").unique("game_id", keep="first").select("game_id", fb_team="killer_team_id", fb_s="t_s")
+    blood = _first_per_game(kills).select("game_id", fb_team="killer_team_id", fb_s="t_s")
     return (
         out.join(first_scuttle, on="game_id", how="left")
         .join(blood, on="game_id", how="left")

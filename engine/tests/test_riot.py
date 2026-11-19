@@ -67,8 +67,10 @@ async def test_rate_limiter_waits_when_window_full() -> None:
 
 
 async def test_rate_limiter_keeps_sent_requests_when_limits_change() -> None:
-    limiter = RateLimiter([(100, 60.0)], safety=1.0)
+    limiter = RateLimiter([(100, 0.3)], safety=1.0)
     for _ in range(3):
         await limiter.acquire()
-    limiter.set_limits([(3, 60.0), (100, 120.0)])  # first response syncs the real app limit mid-window
-    assert [len(q) for _, _, q in limiter.windows] == [3, 3]  # a 4th request now has to wait
+    limiter.set_limits([(3, 0.3)])  # first response syncs the real app limit mid-window
+    start = time.monotonic()
+    await limiter.acquire()  # the 3 earlier requests still count: this one waits for the window
+    assert time.monotonic() - start >= 0.2

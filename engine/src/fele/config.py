@@ -12,9 +12,9 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=REPO_ROOT / ".env", extra="ignore")
 
-    stl_data_dir: Path = Field(default=REPO_ROOT.parent / "stl-hackathon-2026-grid-starter")
-    fele_data_dir: Path = Field(default=REPO_ROOT / "data_local")
-    fele_config_dir: Path = Field(default=REPO_ROOT / "config")
+    stl_data_dir: Path = REPO_ROOT.parent / "stl-hackathon-2026-grid-starter"
+    fele_data_dir: Path = REPO_ROOT / "data_local"
+    fele_config_dir: Path = REPO_ROOT / "config"
     riot_api_key: SecretStr | None = Field(
         default=None, validation_alias=AliasChoices("RIOT_DEVELOPER_PLATFORM_API_KEY", "RIOT_API_KEY")
     )

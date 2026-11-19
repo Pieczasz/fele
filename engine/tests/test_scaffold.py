@@ -8,7 +8,7 @@ from fele.api.app import app
 from fele.config import REPO_ROOT
 from fele.external.riot import parse_limits
 from fele.external.soloq import participant_rows
-from fele.ingest.grid import final_state, iter_events
+from fele.ingest.grid import read_envelopes
 from fele.static.champions import build_mapping, resolve
 
 DDRAGON = {
@@ -53,8 +53,7 @@ def test_stream_synthetic_feed(tmp_path):
     ]
     with zstd.open(path, "wt", encoding="utf-8") as f:
         f.writelines(json.dumps(e) + "\n" for e in envs)
-    assert len(list(iter_events(path))) == 3
-    assert final_state(path) == {"n": 2}
+    assert [e["sequenceNumber"] for e in read_envelopes(path)] == [0, 1, 2]
 
 
 def test_participant_rows():

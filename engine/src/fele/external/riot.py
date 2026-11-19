@@ -44,6 +44,7 @@ PLATFORM_TO_REGION = {
 }
 
 RANKED_SOLO_QUEUE = 420
+MAX_RETRIES = 5
 
 type Limits = Sequence[tuple[int, float]]
 
@@ -52,33 +53,34 @@ DEFAULT_LIMITS: Limits = ((20, 1.0), (100, 120.0))
 
 
 class RateLimiter:
-    """Sliding-window limiter over several (count, seconds) windows."""
+    """Sliding-window limiter over several (count, seconds) windows, sharing one log of sent requests."""
 
     def __init__(self, limits: Limits = DEFAULT_LIMITS, safety: float = 0.9) -> None:
         self.safety = safety
-        self.windows: list[tuple[int, float, deque[float]]] = []
+        self.windows: list[tuple[int, float]] = []
         self.set_limits(limits)
+        self.sent: deque[float] = deque()  # send times, oldest first; outlives limit changes
+        self.synced = False  # limits taken from a real X-App-Rate-Limit header
         self.lock = asyncio.Lock()
         self.blocked_until = 0.0
 
     def set_limits(self, limits: Limits) -> None:
-        """Replace the windows, keeping the requests already sent (else a mid-window sync would allow a 2nd burst)."""
-        sent = max(self.windows, key=lambda w: w[1])[2] if self.windows else deque[float]()
-        self.windows = [(max(1, int(n * self.safety)), s, deque(sent)) for n, s in limits]
+        self.windows = [(max(1, int(n * self.safety)), span) for n, span in limits]
 
     async def acquire(self) -> None:
         async with self.lock:
             while True:
                 now = time.monotonic()
+                longest = max(span for _, span in self.windows)
+                while self.sent and now - self.sent[0] >= longest:
+                    self.sent.popleft()
                 wait = max(0.0, self.blocked_until - now)
-                for n, span, q in self.windows:
-                    while q and now - q[0] >= span:
-                        q.popleft()
-                    if len(q) >= n:
-                        wait = max(wait, span - (now - q[0]))
+                for n, span in self.windows:
+                    recent = [t for t in self.sent if now - t < span]
+                    if len(recent) >= n:  # wait until enough of them age out of this window
+                        wait = max(wait, span - (now - recent[len(recent) - n]))
                 if wait <= 0:
-                    for _, _, q in self.windows:
-                        q.append(now)
+                    self.sent.append(now)
                     return
                 await asyncio.sleep(wait + 0.01)
 
@@ -90,16 +92,14 @@ def parse_limits(header: str | None) -> Limits | None:
 
 
 class RiotClient:
-    def __init__(self, api_key: str | None = None, cache_dir: Path | None = None, max_retries: int = 5) -> None:
+    def __init__(self) -> None:
         secret = settings().riot_api_key
-        key = api_key or (secret.get_secret_value() if secret else None)
+        key = secret.get_secret_value() if secret else ""
         if not key:
             raise RuntimeError("Set RIOT_DEVELOPER_PLATFORM_API_KEY in .env")
         self._http = httpx.AsyncClient(headers={"X-Riot-Token": key}, timeout=30)
-        self.cache_dir = cache_dir or settings().local("riot_cache")
-        self.max_retries = max_retries
-        self.limiters: dict[str, RateLimiter] = {}
-        self._limits_synced: set[str] = set()
+        self.cache_dir = settings().local("riot_cache")
+        self.limiters: dict[str, RateLimiter] = {}  # one per routing host (euw1, europe, …)
         self.throttled = 0  # 429 responses seen (should stay ~0: the limiter runs at 90 % of the app limit)
 
     async def __aenter__(self) -> Self:
@@ -122,19 +122,18 @@ class RiotClient:
             return json.loads(gzip.decompress(cp.read_bytes()))
 
         limiter = self.limiters.setdefault(host, RateLimiter())
-        for attempt in range(self.max_retries):
+        for attempt in range(MAX_RETRIES):
             await limiter.acquire()
             r = await self._http.get(url)
-            if host not in self._limits_synced and (lim := parse_limits(r.headers.get("X-App-Rate-Limit"))):
+            if not limiter.synced and (lim := parse_limits(r.headers.get("X-App-Rate-Limit"))):
                 limiter.set_limits(lim)
-                self._limits_synced.add(host)
+                limiter.synced = True
             status = r.status_code
             if status == HTTPStatus.OK:
-                data = r.json()
-                if cache:
+                if cache:  # the raw body: no re-serialising, and level 6 is ~3x faster than gzip's default 9
                     cp.parent.mkdir(parents=True, exist_ok=True)
-                    cp.write_bytes(gzip.compress(json.dumps(data).encode()))
-                return data
+                    cp.write_bytes(gzip.compress(r.content, compresslevel=6))
+                return r.json()
             if status == HTTPStatus.NOT_FOUND:
                 return None
             if status == HTTPStatus.TOO_MANY_REQUESTS or status >= HTTPStatus.INTERNAL_SERVER_ERROR:
@@ -146,7 +145,7 @@ class RiotClient:
             if status in (HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN):
                 raise RuntimeError(f"Riot API {status}: key missing, invalid or expired (dev keys last 24h)")
             r.raise_for_status()
-        raise RuntimeError(f"Giving up on {host}{path} after {self.max_retries} attempts")
+        raise RuntimeError(f"Giving up on {host}{path} after {MAX_RETRIES} attempts")
 
     # --- endpoint helpers -------------------------------------------------
     async def account_by_riot_id(self, region: str, game_name: str, tag: str) -> JsonObj | None:

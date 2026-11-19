@@ -10,6 +10,7 @@ from datetime import UTC, datetime, timedelta
 import polars as pl
 
 from fele.config import settings
+from fele.db import write_tables
 from fele.static.build import read_tags, static_dir
 from fele.static.ddragon import live_patch, patch_key
 from fele.stats import data, draft, elo, macro, meta, pools
@@ -51,11 +52,11 @@ def _meta_inputs(windows: pl.DataFrame, last_grid: str) -> tuple[pl.DataFrame, p
     return windows, soloq, deltas
 
 
-def _meta_by_role(meta_table: pl.DataFrame, top_n: int = pools.META_TOP_N) -> dict[str, list[str]]:
+def _meta_by_role(meta_table: pl.DataFrame) -> dict[str, list[str]]:
     roles = read_tags().select("champion", pl.col("roles").str.split("|"))
     live = meta_table.filter(pl.col("window") == "live").join(roles, on="champion").explode("roles")
     return {
-        str(role): g.sort("meta_score", descending=True)["grid"].head(top_n).to_list()
+        str(role): g.sort("meta_score", descending=True)["grid"].head(pools.META_TOP_N).to_list()
         for (role,), g in live.drop_nulls("grid").group_by("roles")
     }
 
@@ -111,10 +112,6 @@ def build(as_of: datetime | None = None) -> dict[str, int]:
         "stats_macro_timings": per_period(lambda m, _: macro.team_macro_timings(m), tgm),
         "stats_early_kills": per_period(macro.early_kill_cells, data.read("kills")),
     }
-    out = settings().local("aggregates")
-    counts: dict[str, int] = {}
-    for name, df in tables.items():
-        df.write_parquet(out / f"{name}.parquet")
-        counts[name] = df.height
+    counts = write_tables(settings().local("aggregates"), tables)
     counts["as_of"] = int(as_of.replace(tzinfo=as_of.tzinfo or UTC).timestamp())
     return counts

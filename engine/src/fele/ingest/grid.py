@@ -16,29 +16,14 @@ def read_envelopes(path: Path) -> Iterator[JsonObj]:
             yield json.loads(line)
 
 
-def iter_events(path: Path) -> Iterator[tuple[JsonObj, JsonObj]]:
-    """Yield (envelope, event) pairs in feed order."""
-    for env in read_envelopes(path):
-        for ev in env["events"]:
-            yield env, ev
-
-
-def final_state(path: Path) -> JsonObj | None:
-    """The seriesState of the last event that has one (= final box score)."""
-    last: JsonObj | None = None
-    for _, ev in iter_events(path):
-        last = ev.get("seriesState") or last
-    return last
-
-
 def _read_csv(path: Path) -> list[dict[str, str]]:
     with path.open(newline="", encoding="utf-8") as f:
         return list(csv.DictReader(f))
 
 
-def read_meta(table: str, title: str = "lol") -> list[dict[str, str]]:
-    """Rows of meta/<table>.csv for one title (lol/val)."""
-    return [r for r in _read_csv(settings().meta_dir / f"{table}.csv") if r.get("title", title) == title]
+def read_meta(table: str) -> list[dict[str, str]]:
+    """LoL rows of meta/<table>.csv (the meta files mix LoL and Valorant)."""
+    return [r for r in _read_csv(settings().meta_dir / f"{table}.csv") if r.get("title", "lol") == "lol"]
 
 
 def series_index() -> list[dict[str, str]]:

@@ -182,11 +182,13 @@ Every response is cached in `data_local/riot_cache/`, so an interrupted run resu
 
 | Table | Grain | Columns |
 |---|---|---|
-| `soloq_champion_patch` | champion × position × patch | games, wins, win_rate, pick_rate, bans, platforms, avg_duration_s, matches |
-| `soloq_matchups` | champion × lane opponent × position × patch | games, wins, win_rate |
-| `soloq_items` | champion × position × patch × first (up to) 3 completed items | games, wins, share, win_rate |
+| `soloq_champion_patch` | champion (+ `champion_id`) × position × patch | games, wins, win_rate, pick_rate, bans, platforms, avg_duration_s, matches |
+| `soloq_matchups` | champion × lane opponent (+ `champion_id`, `opponent_id`) × position × patch | games, wins, win_rate |
+| `soloq_items` | champion (+ `champion_id`) × position × patch × first (up to) 3 completed items | games, wins, share, win_rate |
 | `player_soloq_pool` | coach's player × champion | games, wins, win_rate, last_played, patches |
 
+- Join to Data Dragon by `champion_id` = `static.champions.riot_id`: match-v5 `championName` isn't always the
+  Data Dragon key (`FiddleSticks` vs `Fiddlesticks`).
 - Positions are Riot's `teamPosition` (`TOP`, `JUNGLE`, `MIDDLE`, `BOTTOM`, `UTILITY`).
 - "Completed item" = buyable on Summoner's Rift, nothing builds out of it, ≥ 1000 gold, not a consumable (that patch's
   Data Dragon `item.json`). Undone purchases are removed.

@@ -14,7 +14,7 @@ def expected(r_a: float, r_b: float) -> float:
     return 1.0 / (1.0 + 10 ** ((r_b - r_a) / 400))
 
 
-def game_elo(ctx: pl.DataFrame, k: float = K) -> pl.DataFrame:
+def game_elo(ctx: pl.DataFrame) -> pl.DataFrame:
     """Per game: blue/red pre-game rating, number of earlier rated games for each team (n), expected blue win."""
     ratings: dict[str, float] = {}
     played: dict[str, int] = {}
@@ -35,8 +35,8 @@ def game_elo(ctx: pl.DataFrame, k: float = K) -> pl.DataFrame:
             }
         )
         s = 1.0 if g["winner_team_id"] == blue else 0.0
-        ratings[blue] = rb + k * (s - e)
-        ratings[red] = rr - k * (s - e)
+        ratings[blue] = rb + K * (s - e)
+        ratings[red] = rr - K * (s - e)
         played[blue] = played.get(blue, 0) + 1
         played[red] = played.get(red, 0) + 1
     return pl.DataFrame(rows)

@@ -7,14 +7,28 @@ Only views are created: they point at the GRID clone and the Parquet files in da
 from pathlib import Path
 
 import duckdb
+import polars as pl
 
 from fele.config import settings
 
 GRID_META = ("games", "rosters", "players", "teams", "tournaments", "characters")
+PARQUET_SCHEMAS = (  # schema -> data_local/ folder of Parquet files, one view per file
+    ("lol", ("parquet",)),  # `fele ingest`
+    ("static", ("static",)),  # `fele static`
+    ("leaguepedia", ("external", "leaguepedia_hf")),  # `fele fetch-leaguepedia-hf`
+    ("aggregates", ("aggregates",)),  # `fele soloq-aggregate`, `fele stats`
+)
 
 
 def db_path() -> Path:
     return settings().local() / "fele.duckdb"
+
+
+def write_tables(out: Path, tables: dict[str, pl.DataFrame]) -> dict[str, int]:
+    """Write each frame to out/<name>.parquet and return the row counts."""
+    for name, df in tables.items():
+        df.write_parquet(out / f"{name}.parquet")
+    return {name: df.height for name, df in tables.items()}
 
 
 def _sql_path(p: Path) -> str:
@@ -33,21 +47,14 @@ def build_catalog() -> dict[str, list[str]]:
         for t in GRID_META:  # meta tables hold both titles; keep LoL only
             views[f"grid.{t}"] = f"{_csv(s.meta_dir / f'{t}.csv')} WHERE title = 'lol'"
         views["grid.series"] = _csv(s.lol_dir / "series.csv")
-    for f in sorted(s.local("parquet").glob("*.parquet")):  # clean tables from `fele ingest`
-        views[f"lol.{f.stem}"] = f"SELECT * FROM read_parquet('{_sql_path(f)}')"
-    for f in sorted(s.local("static").glob("*.parquet")):  # `fele static`
-        views[f"static.{f.stem}"] = f"SELECT * FROM read_parquet('{_sql_path(f)}')"
-    lp = s.local("external", "leaguepedia_hf")
-    for f in sorted(lp.glob("*.parquet")):
-        views[f"leaguepedia.{f.stem}"] = f"SELECT * FROM read_parquet('{_sql_path(f)}')"
+    for schema, parts in PARQUET_SCHEMAS:
+        for f in sorted(s.local(*parts).glob("*.parquet")):
+            views[f"{schema}.{f.stem}"] = f"SELECT * FROM read_parquet('{_sql_path(f)}')"
     soloq = s.local("soloq")
     if any(soloq.glob("*/*.parquet")):
         views["soloq.participants"] = (
             f"SELECT * FROM read_parquet('{_sql_path(soloq)}/*/*.parquet', union_by_name=true)"
         )
-    agg = s.local("aggregates")
-    for f in sorted(agg.glob("*.parquet")):
-        views[f"aggregates.{f.stem}"] = f"SELECT * FROM read_parquet('{_sql_path(f)}')"
 
     created: dict[str, list[str]] = {}
     with duckdb.connect(db_path()) as con:

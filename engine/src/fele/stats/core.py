@@ -78,18 +78,16 @@ def with_shrunk(df: pl.DataFrame, k: str = "k", n: str = "n", prior_by: tuple[st
     return pl.concat([_shrink_group(g, k, n) for _, g in df.group_by(prior_by, maintain_order=True)])
 
 
-def bh_qvalues(p: np.ndarray) -> np.ndarray:
+def bh_qvalues(p: npt.ArrayLike) -> npt.NDArray[np.float64]:
     """Benjamini–Hochberg adjusted p-values (q-values)."""
-    p = np.asarray(p, float)
-    m = len(p)
-    if m == 0:
-        return p
-    order = np.argsort(p)
-    ranked = p[order] * m / np.arange(1, m + 1)
-    q = np.minimum.accumulate(ranked[::-1])[::-1].clip(max=1.0)
-    out = np.empty(m)
-    out[order] = q
-    return out
+    p = np.asarray(p, dtype=float)
+    return p if p.size == 0 else np.asarray(stats.false_discovery_control(p, method="bh"), dtype=float)
+
+
+def _binom_p(k: int, n: int, base: float | None) -> float:
+    if not n or base is None:
+        return 1.0
+    return float(stats.binomtest(k, n, min(max(base, 1e-9), 1 - 1e-9)).pvalue)
 
 
 def with_tendency(df: pl.DataFrame, base: str = "base_rate", k: str = "k", n: str = "n") -> pl.DataFrame:
@@ -99,15 +97,9 @@ def with_tendency(df: pl.DataFrame, base: str = "base_rate", k: str = "k", n: st
     """
     if df.is_empty():
         return df.with_columns(p=pl.lit(None, pl.Float64), q=pl.lit(None, pl.Float64), tendency=pl.lit(None, pl.String))
-    ks, ns, bs = df[k].to_list(), df[n].to_list(), df[base].to_list()
-    p = np.array(
-        [
-            stats.binomtest(int(kk), int(nn), float(min(max(bb, 1e-9), 1 - 1e-9))).pvalue
-            if nn and bb is not None
-            else 1.0
-            for kk, nn, bb in zip(ks, ns, bs, strict=True)
-        ]
-    )
+    triples = list(zip(df[k].to_list(), df[n].to_list(), df[base].to_list(), strict=True))
+    cache = {t: _binom_p(*t) for t in set(triples)}  # teams of one league share base rates: ~10x fewer tests
+    p = np.array([cache[t] for t in triples])
     q = bh_qvalues(p)
     label = np.where(q < STRONG_Q, "strong", np.where(p < WEAK_P, "weak", "noise"))
     return df.with_columns(pl.Series("p", p), pl.Series("q", q), pl.Series("tendency", label))

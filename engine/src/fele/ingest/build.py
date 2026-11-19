@@ -10,33 +10,22 @@ from pathlib import Path
 import polars as pl
 
 from fele.config import settings
+from fele.db import write_tables
 from fele.ingest.grid import series_index, series_path
-from fele.ingest.replay import Tables, replay
+from fele.ingest.replay import EVENT_TABLES, replay
 from fele.ingest.roles import infer_roles
 
-TABLES = (
-    "series",
-    "games",
-    "draft_actions",
-    "participants",
-    "kills",
-    "objectives",
-    "levelups",
-    "item_events",
-    "positions",
-)
+TABLES = ("series", "games", "draft_actions", "participants", *EVENT_TABLES)
 
 
 def parquet_dir() -> Path:
     return settings().local("parquet")
 
 
-def _replay_one(series_id: str) -> Tables:
-    return replay(series_id, series_path(series_id))
-
-
-def _frame(rows: list[dict[str, object]]) -> pl.DataFrame:
-    return pl.DataFrame(rows, infer_schema_length=None)
+def _replay_one(series_id: str) -> dict[str, pl.DataFrame]:
+    """Runs in a worker: replay one series and build its frames there (pickling frames is ~8x cheaper than dicts)."""
+    tables = replay(series_id, series_path(series_id))
+    return {t: pl.DataFrame(tables[t], infer_schema_length=None) for t in TABLES}
 
 
 def _utc(*cols: str) -> list[pl.Expr]:
@@ -64,13 +53,11 @@ def build(workers: int | None = None) -> dict[str, int]:
     """Run the ingest and return row counts per table."""
     t0 = time.monotonic()
     index = {r["series_id"]: r for r in series_index()}
-    acc: dict[str, list[dict[str, object]]] = {t: [] for t in TABLES}
     with ProcessPoolExecutor(workers) as ex:
-        for tables in ex.map(_replay_one, list(index), chunksize=4):
-            for t in TABLES:
-                acc[t] += tables[t]
-
-    frames = {t: _frame(acc.pop(t)) for t in TABLES}
+        parts = list(ex.map(_replay_one, list(index), chunksize=4))
+    # relaxed: a series where a column is all null infers Null (or list[null]) and must upcast
+    frames = {t: pl.concat([p[t] for p in parts if p[t].height], how="diagonal_relaxed") for t in TABLES}
+    del parts
     meta = pl.DataFrame(list(index.values())).select("series_id", "event", "stage", "scheduled_start")
     frames["series"] = (
         frames["series"]
@@ -84,10 +71,6 @@ def build(workers: int | None = None) -> dict[str, int]:
     frames["participants"] = frames["participants"].join(roles, on=["game_id", "player_id"], how="left")
     frames["fearless_state"] = fearless_state(frames["games"], frames["draft_actions"])
 
-    out = parquet_dir()
-    counts: dict[str, int] = {}
-    for name, df in frames.items():
-        df.write_parquet(out / f"{name}.parquet")
-        counts[name] = df.height
+    counts = write_tables(parquet_dir(), frames)
     counts["seconds"] = round(time.monotonic() - t0)
     return counts

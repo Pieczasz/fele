@@ -12,7 +12,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
-from fele.ingest.grid import iter_events
+from fele.ingest.grid import read_envelopes
 from fele.jsontypes import JsonObj
 
 type Row = dict[str, Any]
@@ -84,24 +84,31 @@ def _assisters(ev: JsonObj, game_id: str) -> list[str]:
 
 
 class _Replay:
-    def __init__(self, series_id: str) -> None:
-        self.series_id = series_id
+    def __init__(self) -> None:
         self.rows: Tables = {t: [] for t in EVENT_TABLES}
-        self.undo_stack: dict[tuple[str, str, str], list[tuple[str, Row]]] = defaultdict(list)
+        self.undo_stack: dict[tuple[str, str, str], list[Row]] = defaultdict(list)
+        self.undone: set[int] = set()  # id() of rolled-back rows, dropped at the end (O(1) per undo)
         self.item_names: dict[str, str] = {}
         self.pending_structure: dict[str, str] = {}  # game_id -> structure destroyed in this envelope
         self.rollbacks = 0
 
     def add(self, table: str, row: Row, key: tuple[str, str, str]) -> None:
         self.rows[table].append(row)
-        self.undo_stack[key].append((table, row))
+        self.undo_stack[key].append(row)
 
     def undo(self, key: tuple[str, str, str]) -> None:
         self.rollbacks += 1
         stack = self.undo_stack.get(key)
         if stack:
-            table, row = stack.pop()
-            self.rows[table].remove(row)
+            self.undone.add(id(stack.pop()))
+
+    def kept(self, table: str, game_ids: set[str] | None) -> list[Row]:
+        """Rows not rolled back, of games in the final state (all games if there is none)."""
+        return [
+            row
+            for row in self.rows[table]
+            if id(row) not in self.undone and (game_ids is None or row["game_id"] in game_ids)
+        ]
 
     def handle(self, ev: JsonObj) -> None:  # noqa: C901 — one flat dispatch over event types
         action: str = ev["action"]
@@ -230,22 +237,20 @@ def _draft(game: JsonObj, sides: dict[str, str]) -> tuple[list[Row], str | None]
 
 def replay(series_id: str, path: Path) -> Tables:
     """All rows for one series. Event tables only keep games present in the final state."""
-    r = _Replay(series_id)
+    r = _Replay()
     final: JsonObj | None = None
-    envelope: JsonObj | None = None
-    for env, ev in iter_events(path):
-        if env is not envelope:  # GRID sends `destroyed` + `completed destroy*` in one envelope; never carry it over
-            r.pending_structure.clear()
-            envelope = env
-        r.handle(ev)
-        final = ev.get("seriesState") or final
+    for env in read_envelopes(path):
+        r.pending_structure.clear()  # GRID sends `destroyed` + `completed destroy*` in one envelope
+        for ev in env["events"]:
+            r.handle(ev)
+            final = ev.get("seriesState") or final
     out: Tables = {"series": [], "games": [], "draft_actions": [], "participants": []}
     if final is None:
-        return out | r.rows
+        return out | {t: r.kept(t, None) for t in EVENT_TABLES}
 
     game_ids = {g["id"] for g in final["games"]}
     for t in EVENT_TABLES:
-        out[t] = [row for row in r.rows[t] if row["game_id"] in game_ids]
+        out[t] = r.kept(t, game_ids)
     for row in out["item_events"]:
         row["item"] = r.item_names.get(row["item_id"])
 

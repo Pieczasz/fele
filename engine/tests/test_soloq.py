@@ -121,9 +121,10 @@ def _mock_riot(matches: dict[str, dict[str, object]]) -> dict[str, respx.Route]:
 
 @respx.mock
 async def test_sample_counts_patch_and_resumes_without_repeat_requests(tmp_settings: Path):
-    dd = tmp_settings / "data_local" / "ddragon" / "16.23.1"
-    dd.mkdir(parents=True)
-    (dd / "item.json").write_text(json.dumps(ITEMS))
+    dd = tmp_settings / "data_local" / "ddragon"
+    (dd / "16.23.1").mkdir(parents=True)
+    (dd / "16.23.1" / "item.json").write_text(json.dumps(ITEMS))
+    (dd / "versions.json").write_text(json.dumps(["16.23.1"]))
     soloq.completed_for_patch.cache_clear()
     routes = _mock_riot({"KR_1": _match("KR_1"), "KR_2": _match("KR_2", "16.22.1.1")})
 

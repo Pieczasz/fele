@@ -6,6 +6,7 @@ row of each match is used, and the output is champion-level (no PUUIDs, no other
 GRID tables: nothing joins them in code.
 """
 
+import asyncio
 import time
 from typing import Any
 
@@ -42,8 +43,7 @@ async def player_rows(rc: RiotClient, player: str, riot_id: str, days: int, max_
     start = int(time.time()) - days * 86400
     ids = await rc.match_ids(region, account["puuid"], start_time=start, count=max_matches) or []
     rows: list[Row] = []
-    for mid in ids:
-        m = await rc.match(region, mid)
+    for m in await asyncio.gather(*(rc.match(region, mid) for mid in ids)):  # the client's limiter paces them
         if not m or m["info"].get("queueId") != RANKED_SOLO_QUEUE:
             continue
         me = next((p for p in m["info"]["participants"] if p["puuid"] == account["puuid"]), None)

@@ -19,7 +19,8 @@ import polars as pl
 
 from fele.prefs import Role
 
-ROLES = (Role.top, Role.jungle, Role.mid, Role.bot, Role.support)
+type Lanes = dict[tuple[str, str], Counter[str]]  # (game_id, player_id) -> early snapshots per lane
+ROLES = tuple(Role)  # top, jungle, mid, bot, support
 SUPPORT_ITEMS = frozenset(
     {
         "World Atlas",
@@ -59,7 +60,7 @@ def _log(p: float) -> float:
 
 
 def _team_scores(
-    players: list[dict[str, Any]], lanes: dict[str, Counter[str]], champ_prior: dict[str, list[float]]
+    players: list[dict[str, Any]], lanes: Lanes, champ_prior: dict[str, list[float]]
 ) -> list[list[list[float]]]:
     """Log-score matrices [hypothesis][player][role]; hypotheses = normal lanes, lane swap."""
     neutral_total = sum(p["neutral_killed"] or 0 for p in players) or 1
@@ -72,7 +73,7 @@ def _team_scores(
             jg = 0.02 + 0.96 * (p["neutral_killed"] or 0) / neutral_total
             sup = p["support_item"] or (not has_sup_item and (p["minions_killed"] or 0) == min_cs)
             sup_ev = 0.95 if sup else 0.05
-            c = lanes[p["player_id"]]
+            c = lanes[p["game_id"], p["player_id"]]
             n = sum(c.values()) + 1.5
             f = {k: (c.get(k, 0) + 0.5) / n for k in ("mid", "top", "bot")}
             laner = _log(1 - jg) + _log(1 - sup_ev)
@@ -110,18 +111,16 @@ def _assign(hypotheses: list[list[list[float]]]) -> tuple[tuple[int, ...], float
     return best, 1 / z, swapped[best]
 
 
-def _pass(
-    teams: list[list[dict[str, Any]]], lanes: dict[str, Counter[str]], champ_prior: dict[str, list[float]]
-) -> list[dict[str, Any]]:
+def _pass(teams: list[list[dict[str, Any]]], lanes: Lanes, champ_prior: dict[str, list[float]]) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for players in teams:
         perm, conf, swap = _assign(_team_scores(players, lanes, champ_prior))
         for i, p in enumerate(players):
-            c = lanes[p["player_id"]]
+            c = lanes[p["game_id"], p["player_id"]]
             out.append(
                 {
                     "game_id": p["game_id"],
-                    "player_id": p["player_id"].split("|")[1],
+                    "player_id": p["player_id"],
                     "champion": p["champion"],
                     "inferred_role": str(ROLES[perm[i]]),
                     "role_confidence": conf,
@@ -135,11 +134,11 @@ def _pass(
     return out
 
 
-def champion_prior(rows: list[dict[str, Any]], min_conf: float = LOW_CONFIDENCE) -> dict[str, list[float]]:
+def champion_prior(rows: list[dict[str, Any]]) -> dict[str, list[float]]:
     """P(role | champion) from confident assignments, Laplace-smoothed."""
     counts: dict[str, Counter[str]] = defaultdict(Counter)
     for r in rows:
-        if r["role_confidence"] >= min_conf:
+        if r["role_confidence"] >= LOW_CONFIDENCE:
             counts[r["champion"]][r["inferred_role"]] += 1
     return {ch: [(c.get(str(r), 0) + 1) / (c.total() + len(ROLES)) for r in ROLES] for ch, c in counts.items()}
 
@@ -148,15 +147,14 @@ def infer_roles(participants: pl.DataFrame, positions: pl.DataFrame, item_events
     """One row per (game_id, player_id): inferred_role, role_confidence, plus the signals used."""
     sup_buyers = set(
         item_events.filter(pl.col("action") == "purchased", pl.col("item").is_in(list(SUPPORT_ITEMS)))
-        .select(pl.concat_str("game_id", "player_id", separator="|"))
-        .to_series()
-        .to_list()
+        .select("game_id", "player_id")
+        .rows()
     )
     early = positions.filter(pl.col("t_s").is_between(*EARLY), ~pl.col("source").is_in(SHOP_SOURCES))
-    lanes: dict[str, Counter[str]] = defaultdict(Counter)
+    lanes: Lanes = defaultdict(Counter)
     for gid, pid, x, y in early.select("game_id", "player_id", "x", "y").iter_rows():
         if (ln := lane(x, y)) is not None:
-            lanes[f"{gid}|{pid}"][ln] += 1
+            lanes[gid, pid][ln] += 1
 
     teams: list[list[dict[str, Any]]] = []
     skipped: list[dict[str, Any]] = []
@@ -165,16 +163,8 @@ def infer_roles(participants: pl.DataFrame, positions: pl.DataFrame, item_events
         if len(members) != len(ROLES):
             skipped += [{"game_id": gid, "player_id": p["player_id"]} for p in members]
             continue
-        teams.append(
-            [
-                {**p, "support_item": f"{gid}|{p['player_id']}" in sup_buyers, "player_id": f"{gid}|{p['player_id']}"}
-                for p in members
-            ]
-        )
+        teams.append([{**p, "support_item": (gid, p["player_id"]) in sup_buyers} for p in members])
     rows: list[dict[str, Any]] = _pass(teams, lanes, {})
     for _ in range(EM_ROUNDS):
         rows = _pass(teams, lanes, champion_prior(rows))
     return pl.DataFrame(rows + skipped, infer_schema_length=None).drop("champion")
-
-
-__all__ = ["LOW_CONFIDENCE", "ROLES", "champion_prior", "infer_roles", "lane"]

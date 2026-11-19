@@ -8,7 +8,6 @@ and rows parsed so far are written even when a run is interrupted. Only aggregat
 
 import asyncio
 import hashlib
-import json
 import random
 import time
 from functools import cache
@@ -19,9 +18,11 @@ import polars as pl
 from fele.config import settings
 from fele.external.riot import PLATFORM_TO_REGION, RANKED_SOLO_QUEUE, RiotClient
 from fele.jsontypes import JsonObj
-from fele.static.ddragon import patch_of
+from fele.static.ddragon import cached, cached_versions, patch_of
 
-DEFAULT_TIERS = ("challenger", "grandmaster")
+APEX_TIERS = ("challenger", "grandmaster")
+PER_PLAYER = 20  # recent match ids requested per ladder player
+SEED = 0  # ladder shuffle, so re-runs walk players in the same order
 CORE_ITEMS = 3  # first N completed items = the "build"
 COMPLETED_MIN_GOLD = 1000
 
@@ -45,15 +46,14 @@ def completed_items(item_json: JsonObj) -> set[int]:
 
 @cache
 def completed_for_patch(patch: str) -> frozenset[int]:
-    """Completed items of a patch from the cached Data Dragon item.json (latest cached version as fallback)."""
-    dd = settings().local("ddragon")
-    path = dd / f"{patch}.1" / "item.json"
-    if not path.exists():
-        cached = sorted(dd.glob("*/item.json"), key=lambda p: tuple(int(x) for x in p.parent.name.split(".")))
-        if not cached:
-            return frozenset()
-        path = cached[-1]
-    return frozenset(completed_items(json.loads(path.read_text())))
+    """Completed items of a patch from the cached Data Dragon item.json (latest cached patch as fallback)."""
+    vs = cached_versions()
+    for version in [v for v in vs if patch_of(v) == patch] + vs[:1]:
+        try:
+            return frozenset(completed_items(cached(version, "item")))
+        except FileNotFoundError:
+            continue
+    return frozenset()
 
 
 def item_order(timeline: JsonObj, completed: frozenset[int]) -> dict[int, list[int]]:
@@ -97,16 +97,17 @@ def wants_timeline(match_id: str, share: float) -> bool:
     return int(hashlib.sha256(match_id.encode()).hexdigest()[:8], 16) / 0xFFFFFFFF < share
 
 
-async def _apex_puuids(rc: RiotClient, platform: str, tiers: tuple[str, ...]) -> list[str]:
+async def _apex_puuids(rc: RiotClient, platform: str) -> list[str]:
     puuids: list[str] = []
-    for tier in tiers:
+    for tier in APEX_TIERS:
         league = await rc.apex_league(platform, tier) or {}
         puuids += [e["puuid"] for e in league.get("entries", []) if e.get("puuid")]
     return puuids
 
 
-def _sampled(platform: str) -> pl.DataFrame | None:
-    files = list(settings().local("soloq", platform).glob("*.parquet"))
+def _read_batches(pattern: str) -> pl.DataFrame | None:
+    """Sampled batches under data_local/soloq/ (relaxed: early batches lack or null-type some columns)."""
+    files = sorted(settings().local("soloq").glob(pattern))
     return pl.concat([pl.read_parquet(f) for f in files], how="diagonal_relaxed") if files else None
 
 
@@ -118,7 +119,7 @@ def _start_time(df: pl.DataFrame | None, patch: str | None, days: int) -> int:
     return fallback
 
 
-async def sample(  # noqa: PLR0913 - sampler knobs exposed on the CLI
+async def sample(
     rc: RiotClient,
     platform: str,
     max_matches: int,
@@ -126,9 +127,6 @@ async def sample(  # noqa: PLR0913 - sampler knobs exposed on the CLI
     *,
     patch: str | None = None,
     timeline_share: float = 0.25,
-    tiers: tuple[str, ...] = DEFAULT_TIERS,
-    per_player: int = 20,
-    seed: int = 0,
 ) -> dict[str, int]:
     """Collect up to `max_matches` new ranked matches (on `patch`, if given). Returns counters.
 
@@ -136,31 +134,35 @@ async def sample(  # noqa: PLR0913 - sampler knobs exposed on the CLI
     hosts for match-v5 (euw1 and eun1 both use `europe`).
     """
     region = PLATFORM_TO_REGION[platform]
-    prev = _sampled(platform)
+    prev = _read_batches(f"{platform}/*.parquet")
     seen: set[str] = set(prev["match_id"].unique().to_list()) if prev is not None else set()
     start = _start_time(prev, patch, days)
     rows: list[Row] = []
     stats = {"matches": 0, "on_patch": 0, "timelines": 0}
     try:
-        puuids = await _apex_puuids(rc, platform, tiers)
-        random.Random(seed).shuffle(puuids)  # noqa: S311 - sampling order, not security
+        puuids = await _apex_puuids(rc, platform)
+        random.Random(SEED).shuffle(puuids)  # noqa: S311 - sampling order, not security
         for puuid in puuids:
             if stats["on_patch"] >= max_matches:
                 break
-            ids = await rc.match_ids(region, puuid, start_time=start, count=per_player) or []
+            ids = await rc.match_ids(region, puuid, start_time=start, count=PER_PLAYER) or []
             new = [i for i in ids if i not in seen]
+            seen.update(new)
             matches = await asyncio.gather(*(rc.match(region, i) for i in new))
-            for mid, m in zip(new, matches, strict=True):
-                seen.add(mid)
-                if not m or m["info"].get("queueId") != RANKED_SOLO_QUEUE:
-                    continue
+            ranked = [
+                (i, m) for i, m in zip(new, matches, strict=True) if m and m["info"].get("queueId") == RANKED_SOLO_QUEUE
+            ]
+            wanted = [i for i, _ in ranked if wants_timeline(i, timeline_share)]
+            timelines = dict(zip(wanted, await asyncio.gather(*(rc.timeline(region, i) for i in wanted)), strict=True))
+            for mid, m in ranked:
+                game_patch = patch_of(m["info"]["gameVersion"])
                 builds = None
-                if wants_timeline(mid, timeline_share) and (tl := await rc.timeline(region, mid)):
-                    builds = item_order(tl, completed_for_patch(patch_of(m["info"]["gameVersion"])))
+                if tl := timelines.get(mid):
+                    builds = item_order(tl, completed_for_patch(game_patch))
                     stats["timelines"] += 1
                 rows += participant_rows(m, platform, builds)
                 stats["matches"] += 1
-                stats["on_patch"] += patch is None or patch_of(m["info"]["gameVersion"]) == patch
+                stats["on_patch"] += patch is None or game_patch == patch
     finally:
         if rows:
             out = settings().local("soloq", platform) / f"batch_{int(time.time())}.parquet"
@@ -169,16 +171,16 @@ async def sample(  # noqa: PLR0913 - sampler knobs exposed on the CLI
 
 
 def sample_rows() -> pl.DataFrame:
-    files = list(settings().local("soloq").glob("*/*.parquet"))
-    if not files:
-        return pl.DataFrame()
-    df = pl.concat([pl.read_parquet(f) for f in files], how="diagonal_relaxed")
-    return df.unique(["match_id", "champion_id", "team_id"])
+    """Every sampled participant row (all platforms), deduplicated; empty if nothing was sampled."""
+    df = _read_batches("*/*.parquet")
+    return pl.DataFrame() if df is None else df.unique(["match_id", "champion_id", "team_id"])
 
 
-def champion_patch_table(df: pl.DataFrame | None = None) -> pl.DataFrame:
-    """Champion x position x patch: games, wins, win rate, pick rate, bans, average game length (all platforms)."""
-    df = sample_rows() if df is None else df
+def champion_patch_table(df: pl.DataFrame) -> pl.DataFrame:
+    """Champion x position x patch: games, wins, win rate, pick rate, bans, average game length (all platforms).
+
+    Keyed by `champion_id`: match-v5 `championName` isn't always the Data Dragon key (e.g. "FiddleSticks").
+    """
     if df.is_empty():
         return df
     picks = df.group_by("patch", "champion", "champion_id", "position").agg(
@@ -195,43 +197,40 @@ def champion_patch_table(df: pl.DataFrame | None = None) -> pl.DataFrame:
         .agg(bans=pl.len())
         .rename({"team_bans": "champion_id"})
     )
-    ids = df.select("champion", "champion_id").unique()
-    bans = bans.join(ids, on="champion_id").drop("champion_id")
     return (
         picks.join(n_matches, on="patch")
-        .join(bans.group_by("patch", "champion").agg(pl.col("bans").sum()), on=["patch", "champion"], how="left")
+        .join(bans, on=["patch", "champion_id"], how="left")
         .with_columns(win_rate=pl.col("wins") / pl.col("games"), pick_rate=pl.col("games") / pl.col("matches"))
         .sort("patch", "games", descending=[True, True])
     )
 
 
-def matchup_table(df: pl.DataFrame | None = None) -> pl.DataFrame:
+def matchup_table(df: pl.DataFrame) -> pl.DataFrame:
     """Lane matchups (same position, opposite teams): champion vs opponent x position x patch, games and wins."""
-    df = sample_rows() if df is None else df
     if df.is_empty():
         return df
-    lane = df.filter(pl.col("position") != "").select("match_id", "patch", "position", "team_id", "champion", "win")
+    cols = ("match_id", "patch", "position", "team_id", "champion", "champion_id", "win")
+    lane = df.filter(pl.col("position") != "").select(cols)
     pairs = lane.join(
-        lane.select("match_id", "position", "team_id", pl.col("champion").alias("opponent")),
+        lane.select("match_id", "position", "team_id", opponent="champion", opponent_id="champion_id"),
         on=["match_id", "position"],
     ).filter(pl.col("team_id") != pl.col("team_id_right"))
     return (
-        pairs.group_by("patch", "position", "champion", "opponent")
+        pairs.group_by("patch", "position", "champion", "champion_id", "opponent", "opponent_id")
         .agg(games=pl.len(), wins=pl.col("win").sum())
         .with_columns(win_rate=pl.col("wins") / pl.col("games"))
         .sort("patch", "games", descending=[True, True])
     )
 
 
-def items_table(df: pl.DataFrame | None = None) -> pl.DataFrame:
+def items_table(df: pl.DataFrame) -> pl.DataFrame:
     """Most common completed-item orders (first 3) per champion x position x patch, from sampled timelines."""
-    df = sample_rows() if df is None else df
     if df.is_empty() or "core_items" not in df.columns:
         return pl.DataFrame()
     items = pl.col("core_items").cast(pl.List(pl.Int64))  # older batches may hold an all-null column
     builds = df.with_columns(items).filter(items.list.len() > 0)
     return (
-        builds.group_by("patch", "champion", "position", "core_items")
+        builds.group_by("patch", "champion", "champion_id", "position", "core_items")
         .agg(games=pl.len(), wins=pl.col("win").sum())
         .with_columns(
             share=pl.col("games") / pl.col("games").sum().over("patch", "champion", "position"),

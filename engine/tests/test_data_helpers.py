@@ -5,13 +5,13 @@ import polars as pl
 import pytest
 
 from fele import prefs
-from fele.external.soloq import champion_patch_table
+from fele.external.soloq import champion_patch_table, sample_rows
 from fele.ingest.grid import read_meta, series_index, series_path
 from fele.static.ddragon import live_patch, versions_since
 
 
 def test_versions_since() -> None:
-    versions = ["16.23.1", "16.1.1", "15.10.1", "15.2.1", "15.1.1", "14.24.1", "lolpatch_7.20"]
+    versions = ["16.23.1", "16.1.1", "15.10.1", "15.2.1", "15.1.1", "14.24.1"]
     assert versions_since("15.1", versions) == ["15.1.1", "15.2.1", "15.10.1", "16.1.1", "16.23.1"]
 
 
@@ -38,7 +38,7 @@ def test_champion_patch_table(tmp_settings: Path) -> None:
          "champion": "Annie", "position": "MIDDLE", "team_bans": [], "duration_s": 1200},
     ]  # fmt: skip
     pl.DataFrame(rows).write_parquet(out / "batch_1.parquet")
-    table = champion_patch_table()
+    table = champion_patch_table(sample_rows())
     annie = table.filter(pl.col("champion") == "Annie").row(0, named=True)
     assert (annie["games"], annie["wins"], annie["matches"], annie["bans"]) == (2, 1, 2, 1)
     assert (annie["win_rate"], annie["avg_duration_s"]) == (0.5, 1500)
@@ -46,7 +46,7 @@ def test_champion_patch_table(tmp_settings: Path) -> None:
 
 @pytest.mark.usefixtures("tmp_settings")
 def test_champion_patch_table_empty() -> None:
-    assert champion_patch_table().is_empty()
+    assert champion_patch_table(sample_rows()).is_empty()
 
 
 def test_prefs_fallback_to_example(tmp_path: Path) -> None:
@@ -59,5 +59,5 @@ def test_live_patch(tmp_settings: Path) -> None:
     assert live_patch() is None
     dd = tmp_settings / "data_local" / "ddragon"
     dd.mkdir(parents=True, exist_ok=True)
-    (dd / "versions.json").write_text(json.dumps(["16.23.1", "16.22.1"]))
+    (dd / "versions.json").write_text(json.dumps(["lolpatch_7.20", "16.23.1", "16.22.1"]))  # non-numeric skipped
     assert live_patch() == "16.23"

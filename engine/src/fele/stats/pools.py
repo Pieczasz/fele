@@ -4,6 +4,7 @@ from datetime import datetime
 
 import numpy as np
 import polars as pl
+from scipy import stats
 
 from fele.stats.core import with_rate, with_shrunk
 
@@ -43,29 +44,26 @@ def player_champions(parts: pl.DataFrame, as_of: datetime, half_life_days: float
 def effective_pool(counts: np.ndarray, rng: np.random.Generator) -> tuple[float, float, float]:
     """exp(entropy) of the champion distribution + basic-bootstrap 95% interval (resampling the player's games)."""
     n = int(counts.sum())
-    p = counts / n
-    value = float(np.exp(-np.sum(p * np.log(p))))
-    draws = rng.multinomial(n, p, size=BOOTSTRAP) / n
-    with np.errstate(divide="ignore", invalid="ignore"):
-        h = -np.nansum(np.where(draws > 0, draws * np.log(draws), 0.0), axis=1)
-    q_lo, q_hi = np.percentile(np.exp(h), [2.5, 97.5])
+    value = float(np.exp(stats.entropy(counts)))
+    draws = rng.multinomial(n, counts / n, size=BOOTSTRAP)
+    q_lo, q_hi = np.percentile(np.exp(stats.entropy(draws, axis=1)), [2.5, 97.5])
     # basic bootstrap: resampling loses rare champions, so the plug-in estimate is biased low; reflect around it,
     # widened to contain the estimate (an even pool can't look more even when resampled)
     lo, hi = min(value, 2 * value - q_hi), max(value, 2 * value - q_lo)
     return value, max(1.0, float(lo)), float(hi)
 
 
-def player_summary(pc: pl.DataFrame, meta_by_role: dict[str, list[str]] | None = None, seed: int = 0) -> pl.DataFrame:
+def player_summary(pc: pl.DataFrame, meta_by_role: dict[str, list[str]]) -> pl.DataFrame:
     """Per player: games (n), unique champions, effective pool size (+ interval), depth, meta overlap (k of top N).
 
     meta_by_role: role -> current top-N meta champions (GRID names); overlap counts those with ≥ 2 games.
     """
-    rng = np.random.default_rng(seed)
+    rng = np.random.default_rng(0)  # fixed: the same data gives the same intervals
     rows: list[dict[str, object]] = []
     for (player_id, role), g in pc.group_by("player_id", "role", maintain_order=True):
         eff, lo, hi = effective_pool(g["n"].to_numpy().astype(float), rng)
         played = set(g.filter(pl.col("n") >= OVERLAP_MIN_GAMES)["champion"].to_list())
-        meta = (meta_by_role or {}).get(str(role), [])
+        meta = meta_by_role.get(str(role), [])
         rows.append(
             {
                 "player_id": player_id,

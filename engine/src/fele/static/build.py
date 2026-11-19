@@ -5,23 +5,25 @@
 - `patch_deltas`: per champion per patch transition (see fele.static.deltas).
 """
 
-import json
+from collections import Counter
 from pathlib import Path
 
 import polars as pl
 
 from fele.config import settings
+from fele.db import write_tables
 from fele.ingest.build import parquet_dir
 from fele.ingest.grid import read_meta
 from fele.jsontypes import JsonObj
+from fele.prefs import Role
 from fele.static.champions import build_mapping, resolve
-from fele.static.ddragon import patch_of, versions_since
+from fele.static.ddragon import cached, cached_versions, patch_of, versions_since
 from fele.static.deltas import is_champion, patch_deltas
 
 FIRST_PATCH = "15.1"  # first patch in the GRID data
 TAGS_CSV = Path(__file__).with_name("champion_tags.csv")
 SCALE = ("engage", "disengage", "peel", "frontline", "poke", "dive", "splitpush", "waveclear")
-ROLES = frozenset({"top", "jungle", "mid", "bot", "support"})
+ROLES = frozenset(Role)
 ENUMS = {"damage": {"AD", "AP", "mixed"}, "scaling": {"early", "mid", "late"}, "range": {"melee", "ranged", "mixed"}}
 MIXED_AP = (0.35, 0.65)  # ap_share range that counts as mixed damage
 
@@ -30,13 +32,24 @@ def static_dir() -> Path:
     return settings().local("static")
 
 
+SPELL_KEEP = ("id", "name", "maxrank", "cooldown", "cost", "range")  # what patch deltas compare
+
+
 def _full(version: str) -> dict[str, JsonObj]:
-    path = settings().local("ddragon") / version / "championFull.json"
-    if not path.exists():
-        msg = f"{path} missing — run `fele fetch-ddragon`"
-        raise FileNotFoundError(msg)
-    data: dict[str, JsonObj] = json.loads(path.read_text())["data"]
-    return {k: v for k, v in data.items() if is_champion(k)}
+    """Champions of one version, trimmed to what the static tables use (47 full files would hold ~1 GB)."""
+    data: dict[str, JsonObj] = cached(version, "championFull")["data"]
+    return {
+        k: {
+            "key": c["key"],
+            "name": c["name"],
+            "tags": c["tags"],
+            "partype": c["partype"],
+            "stats": c["stats"],
+            "spells": [{f: s[f] for f in SPELL_KEEP} for s in c["spells"]],
+        }
+        for k, c in data.items()
+        if is_champion(k)
+    }
 
 
 def read_tags() -> pl.DataFrame:
@@ -47,7 +60,7 @@ def tag_problems(tags: pl.DataFrame, keys: set[str]) -> list[str]:
     """Human-readable problems with the tag CSV (empty list = valid)."""
     problems: list[str] = []
     listed = tags["champion"].to_list()
-    problems += [f"duplicate: {k}" for k in sorted({k for k in listed if listed.count(k) > 1})]
+    problems += [f"duplicate: {k}" for k, n in sorted(Counter(listed).items()) if n > 1]
     problems += [f"missing tags: {k}" for k in sorted(keys - set(listed))]
     problems += [f"unknown champion: {k}" for k in sorted(set(listed) - keys)]
     for r in tags.iter_rows(named=True):
@@ -101,8 +114,7 @@ def champion_map(latest: dict[str, JsonObj]) -> pl.DataFrame:
 
 
 def build() -> dict[str, int]:
-    vs: list[str] = json.loads((settings().local("ddragon") / "versions.json").read_text())
-    versions = [(patch_of(v), _full(v)) for v in versions_since(FIRST_PATCH, vs)]
+    versions = [(patch_of(v), _full(v)) for v in versions_since(FIRST_PATCH, cached_versions())]
     latest = versions[-1][1]
 
     tags = read_tags()
@@ -133,8 +145,4 @@ def build() -> dict[str, int]:
     if unmapped:
         msg = f"GRID champions without a Data Dragon match: {unmapped}"
         raise ValueError(msg)
-    counts: dict[str, int] = {}
-    for name, df in tables.items():
-        df.write_parquet(static_dir() / f"{name}.parquet")
-        counts[name] = df.height
-    return counts
+    return write_tables(static_dir(), tables)
