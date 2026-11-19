@@ -102,3 +102,25 @@ One entry per phase of [AGENT_PLAN.md](AGENT_PLAN.md): what was asked, what the 
 - **Caught along the way:** the first sample (Phase 1) was mostly the previous patch (16.22): only 10–26% of games
   were on 16.23, so the "current patch" signal was thin. The sampler now counts only target-patch games.
 - **Human corrections:** _(fill in at checkpoint: key handling and data volume)_
+
+### Phase 5 — Statistics layer (2026-11-19)
+
+- **Asked:** "continue" → the plan's Phase 5: shrunk win rates with intervals, team draft priority (side and
+  game-number splits), ban targeting, player pools, time-respecting Elo, macro context, tendency significance, meta
+  score, and a Cloud9 scouting notebook.
+- **Agent produced:** `fele.stats` (core / draft / pools / elo / macro / meta) and `fele stats`, which writes 12
+  tables in 7 s. Every rate carries k, n and a 95% interval. 11 unit tests on hand-worked synthetic data, a
+  real-data acceptance test that every interval contains its estimate, `docs/METHODOLOGY.md`, and
+  `engine/notebooks/cloud9_scouting.ipynb` (committed without outputs).
+- **Caught along the way:**
+  - The first shrinkage fit used L-BFGS-B, which silently stopped at the parameter bounds. Every win rate was being
+    pulled almost all the way to 50%. A simulation test (recover a Beta(30, 30) prior) exposed it; Nelder–Mead fixes it.
+  - Priors fitted per patch window swung between no shrinkage and complete pooling (~20 games per champion per
+    window), so one prior per role is now fitted over all windows.
+  - Honest finding: across ~7,000 jungle games, champion win rates vary no more than chance. Shrunk pro win rates
+    stay near 50%, and the meta score leans on presence instead.
+  - The bootstrap interval for effective pool size sat entirely below the estimate (resampling loses rare
+    champions); switched to a basic bootstrap widened to contain the estimate.
+  - GRID ends at 16.17 while the solo-queue sample is 16.23, so they never shared a window → a `live` window joins
+    the latest pro window with the live solo-queue sample and the Data Dragon changes since.
+- **Human corrections:** _(fill in at checkpoint: sanity-check the numbers against LoL knowledge)_

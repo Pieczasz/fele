@@ -260,6 +260,17 @@ def ingest(workers: int | None = None) -> None:
 
 
 @app.command()
+def stats() -> None:
+    """Phase 5 statistics (draft priority, pools, Elo, macro, meta) -> data_local/aggregates/stats_*.parquet."""
+    from fele.db import build_catalog
+    from fele.stats.build import build
+
+    for name, n in build().items():
+        typer.echo(f"{name}: {n}")
+    build_catalog()
+
+
+@app.command()
 def db() -> None:
     """Build data_local/fele.duckdb: views over GRID meta, Leaguepedia, solo-queue data (open it in PyCharm)."""
     from fele.db import build_catalog, db_path

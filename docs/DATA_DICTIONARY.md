@@ -194,6 +194,28 @@ Every response is cached in `data_local/riot_cache/`, so an interrupted run resu
   `config/preferences.yaml` (`"GameName#TAG@na1"`), uses only that player's own row of each match, and is never
   joined to GRID tables (licence §3(e) question to the organizers is still open).
 
+## Statistics — schema `aggregates`, tables `stats_*` (`fele stats`)
+
+Methods, formulas and caveats are in [`docs/METHODOLOGY.md`](METHODOLOGY.md). Rates always come with `k`, `n`,
+`rate`, `lo`, `hi` (Wilson 95%); shrunk rates add `shrunk`, `shrunk_lo`, `shrunk_hi`, `prior_a`, `prior_b`; team
+tendencies add `base_rate`, `p`, `q`, `tendency` (strong / weak / noise). Team tables have `period` = `all` or `recent`
+(last 120 days).
+
+| Table | Grain |
+|---|---|
+| `stats_team_draft` | period × team × champion × split (`all`, `side`, `game_bucket` G1/G2/G3+): presence, picks, bans, first rotation, avg slot |
+| `stats_bans` | one row per ban, with the targeted opponent player (from games before it) |
+| `stats_ban_targets` | period × targeted team × player: bans aimed at the player out of bans faced |
+| `stats_player_champions` | player × champion: games, shrunk win rate, recency-weighted games, comfort |
+| `stats_players` | player: games, unique champions, effective pool size (+ interval), depth, meta overlap |
+| `stats_elo` | game: pre-game Elo of both teams, earlier games rated, expected blue win (internal only) |
+| `stats_team_game_macro` | team-game: jungle start side, first scuttle/blood/tower/drake/grubs/herald, objective times |
+| `stats_macro_rates` | period × team × metric × split (`all`, blue, red): macro rates vs league |
+| `stats_macro_timings` | period × team × metric: median / quartile times of the team's first objectives |
+| `stats_early_kills` | period × team × side × kill/death × 1000-unit map cell (first 15 min) |
+| `stats_champion_roles` | patch window × role × champion: pro win rate, shrunk |
+| `stats_meta` | patch window (or `live`) × champion: presence, shrunk pro/solo-queue win rate, delta, meta score |
+
 ## What GRID data must not be used for
 
 Each player's `externalLinks` include a `RIOT_PUUID`. fele does **not** ingest it. Linking GRID players to Riot API

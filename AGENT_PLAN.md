@@ -292,6 +292,8 @@ After every phase the agent also appends a short entry to `AI_SHOWCASE.md` (what
 
 **Acceptance:** unit tests on synthetic data with known answers; every metric function returns value + n + interval; a notebook (no outputs committed) reproducing a Cloud9 scouting summary.
 
+**Status (2026-11-19):** done. `fele stats` (7 s) writes 12 `stats_*` tables; methods in `docs/METHODOLOGY.md`; Cloud9 summary in `engine/notebooks/cloud9_scouting.ipynb`. Finding: pro champion win rates are mostly noise (EB prior strength 180–670 games, jungle fully pooled).
+
 **🛑 Checkpoint:** human sanity-checks numbers against own LoL knowledge.
 
 ---

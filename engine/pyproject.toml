@@ -45,6 +45,7 @@ dev = [
     "pandera[polars]>=0.36.0",
     "deptry>=0.25.1",
     "pip-audit>=2.10.1",
+    "scipy-stubs>=1.18.1.1",
 ]
 notebook = [
     "ipykernel>=7.4.0",
@@ -68,6 +69,7 @@ line-length = 120
 target-version = "py314"
 
 [tool.ruff.lint]
+allowed-confusables = ["×", "–"]  # math and ranges in docstrings
 select = ["ALL"]
 ignore = [
     "D",        # docstrings: required only where they add value
