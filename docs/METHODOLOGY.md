@@ -95,3 +95,31 @@ meta_score = 0.50·z(pro presence) + 0.25·z(shrunk pro win rate)
 
 `z` standardises within the window; a missing component counts as average (0). The weights are a readable
 heuristic for the meta view. The Phase 8 models learn their own weights from the components.
+
+## Evaluation protocol (Phase 7, `engine/src/fele/eval/`)
+
+`uv run fele evaluate --model <name>` runs one model **and every baseline** through the same folds and writes
+`docs/experiments/<date>-<model>.md` (plus an MLflow run in `data_local/mlflow.db`).
+
+- **Final holdout:** the latest 15% of series (112: 2026-02-27 → 2026-10-12, LEC 2026 Spring and LCS 2026). No fold
+  touches it. `splits.holdout_split(confirm=True)` opens it once, at the end of Phase 8, and records the use in
+  `data_local/holdout_used.json`; a second use is refused.
+- **Outer folds:** walk-forward by calendar month over the last 8 months with games before the holdout (2025-04 …
+  2026-02; Oct–Dec 2025 have no games). Each fold trains on every earlier series and tests on that month.
+  **Inner folds** (`splits.inner_folds`) split a training set the same way, for tuning and calibration in Phase 8.
+- **By series, never by game.** Confidence intervals resample series (paired bootstrap, 2,000 draws).
+- **Metrics.** Outcome: log loss, Brier, ROC AUC, accuracy, ECE (10 bins) and a reliability table, overall and by
+  league, game number (G1/G2/G3+), patch age (week 1/2/3+) and for Cloud9 games. Draft actions: log loss, top-1/5/10,
+  mean reciprocal rank, over the champions still available (earlier picks/bans and Fearless locks removed).
+- **Leakage tests** (`tests/test_eval.py`, also on real data): folds are time-ordered and disjoint; changing a game's
+  result never changes that game's or earlier games' features; Elo `n` counts only earlier games; no in-game statistic
+  is a feature; a draft action only knows earlier actions of its game and the series' Fearless locks.
+
+**Baselines — the bar to beat** (pooled over the 8 folds, 1,137 games / 22,655 draft actions):
+
+| Problem | Model | Result |
+|---|---|---|
+| Outcome | coin flip / blue-side rate | log loss 0.693 (side alone predicts nothing out of sample) |
+| Outcome | `baseline_elo` (logistic on pre-game Elo) | log loss **0.628** [0.606, 0.650], AUC 0.706, accuracy 65%, ECE 0.032 |
+| Draft | `action_global` (champion frequency, latest 3 patches) | top-10 **50.7%**, MRR 0.205, log loss 3.85 |
+| Draft | `action_team_slot` (team × action × phase, shrunk to global) | better ranking (top-1 9.9%, MRR 0.222) but worse log loss (+0.21): overconfident on thin team histories |

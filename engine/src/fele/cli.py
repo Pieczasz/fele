@@ -269,6 +269,21 @@ def stats() -> None:
 
 
 @app.command()
+def evaluate(model: str = "baseline_elo", mlflow: bool = True) -> None:
+    """Walk-forward evaluation of a model and all baselines -> docs/experiments/<date>-<model>.md (+ MLflow run)."""
+    from fele.eval import run
+    from fele.models.baselines import ACTION_MODELS, OUTCOME_MODELS
+
+    if model not in {*OUTCOME_MODELS, *ACTION_MODELS}:
+        die(f"Unknown model {model!r}; choose from {sorted({*OUTCOME_MODELS, *ACTION_MODELS})}")
+    data, res = run.evaluate(model)
+    path = run.write_report(model, run.report(model, data, res))
+    typer.echo(f"report -> {path}")
+    if mlflow:
+        typer.echo(f"MLflow run {run.log_mlflow(model, res, path)} (data_local/mlflow.db)")
+
+
+@app.command()
 def db() -> None:
     """Build data_local/fele.duckdb: views over GRID meta, Leaguepedia, solo-queue data (open it in PyCharm)."""
     from fele.db import build_catalog, db_path

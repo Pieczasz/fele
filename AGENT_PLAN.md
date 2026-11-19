@@ -330,6 +330,8 @@ After every phase the agent also appends a short entry to `AI_SHOWCASE.md` (what
 
 **Acceptance:** one command (`fele evaluate --model baseline_elo`) produces a full report; leakage tests pass.
 
+**Status (2026-11-19):** done. `fele evaluate --model baseline_elo` → `docs/experiments/2026-11-19-baseline_elo.md` (+ MLflow) in ~4 s. Holdout = latest 112 series (2026-02-27 → 2026-10-12), locked and single-use. Bar to beat: outcome log loss 0.628 (Elo), draft top-10 50.7% (global frequency). Leakage tests pass on synthetic and real data. Method: `docs/METHODOLOGY.md`.
+
 **🛑 Checkpoint:** human reviews the baseline report — these numbers are the bar to beat.
 
 ---

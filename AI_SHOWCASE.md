@@ -144,3 +144,25 @@ One entry per phase of [AGENT_PLAN.md](AGENT_PLAN.md): what was asked, what the 
   - In the last 120 days some teams have only a couple of games, so the report shows the games behind each
     period.
 - **Human corrections:** _(fill in at checkpoint: 30-second screen capture, Cloud9 office-hours feedback)_
+
+### Phase 7 — Evaluation harness & baselines (2026-11-19)
+
+- **Asked:** "lets continue do the phase 7": the validation protocol, metrics, paired bootstrap, baselines and
+  leakage tests, behind one command.
+- **Agent produced:** `fele.eval` (series-grouped walk-forward splits, a holdout that is locked and single-use,
+  outcome and draft-action metrics, series bootstrap), `fele.features` (pre-game outcome rows; draft-action rows that
+  know only earlier actions and Fearless locks), five baselines, and `fele evaluate` with a markdown report and an
+  MLflow run. Leakage tests run on synthetic data and the real 745 series.
+- **Findings:** the latest 15% of series is all 2026 LCS/LEC (no LCK or LTA in 2026), so the holdout tests a
+  different league mix than most training data. Side alone predicts nothing out of sample, and Elo is a strong
+  bar (log loss 0.628, AUC 0.71).
+- **Caught along the way:**
+  - The first team-specific draft baseline lost to the global one: it counted a team's whole history, so champions
+    from long-gone patches dominated. Fixed once, by design (same recent-patch window as the global baseline), and
+    then left alone. More tweaking would have been tuning on the test folds. It now ranks better but is
+    overconfident, and the report shows both.
+  - The paired comparison initially sorted one model's rows by its own predictions, which would silently misalign
+    the pairs. Rows are now kept in fold order and their alignment is asserted.
+  - scikit-learn ships no type stubs: one small adapter module is checked in Pyright basic mode, so the rest stays
+    strict.
+- **Human corrections:** _(fill in at checkpoint: review the baseline report)_
