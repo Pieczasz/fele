@@ -118,6 +118,11 @@ LambdaRank stays the best rung (conditional logit 70.2%, global baseline 50.7%),
 holdout numbers above describe the pre-fix model; the holdout is spent and is not re-run, so the fixed model has no
 holdout figure. The model cards on the scouting page quote the walk-forward hit rate.
 
+By slice ([`experiments/2026-11-20-action_lambdarank.md`](experiments/2026-11-20-action_lambdarank.md), walk-forward
+top-10): first bans 74%, first picks 68%, second bans 69%, last picks 73%. By league: LCK 74%, LTA North 71%,
+LTA South 71%, LEC 68%, **LCS 65%**: Cloud9's own league is the hardest to predict, on the fewest test actions
+(900), so read its numbers with that n.
+
 ## Limits and what the models must not be used for
 
 - Probabilities are for draft prep and simulation, not betting; the outcome model is essentially an Elo model.

@@ -28,6 +28,14 @@ jobs:
         run: uv run ruff format --check src tests
       - name: Pyright (strict)
         run: uv run pyright
+      - name: Unused or missing dependencies (deptry)
+        run: uv run deptry src
+      - name: Dead code (vulture, high-confidence only)
+        run: uvx --python 3.14 vulture@2.16 src tests --min-confidence 80
+      - name: Dependency vulnerabilities (pip-audit)
+        run: |
+          uv export --no-hashes --all-extras --no-emit-project -q -o "$RUNNER_TEMP/requirements.txt"
+          uvx pip-audit@2.10.1 -r "$RUNNER_TEMP/requirements.txt" --disable-pip --no-deps
       - name: Tests + coverage (synthetic fixtures only; real-data tests are skipped)
         run: uv run pytest
       - uses: actions/upload-artifact@v4
@@ -47,6 +55,10 @@ jobs:
         run: pnpm lint
       - name: TypeScript (strict)
         run: pnpm typecheck
+      - name: Unused files, exports and dependencies (knip)
+        run: pnpm dlx knip@5.88.1 --no-progress
+      - name: Dependency vulnerabilities
+        run: pnpm audit --prod
       - name: Tests + coverage
         run: pnpm coverage
       - run: pnpm build

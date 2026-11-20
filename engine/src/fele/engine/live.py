@@ -26,7 +26,7 @@ from fele.stats.data import game_context
 
 type Floats = npt.NDArray[np.float32]
 
-CACHE_VERSION = 3  # bump when the pickled classes change (the file name carries it)
+CACHE_VERSION = 4  # bump when the pickled classes change (the file name carries it)
 POSITION = {"top": "TOP", "jungle": "JUNGLE", "mid": "MIDDLE", "bot": "BOTTOM", "support": "UTILITY"}
 MATCHUP_PRIOR = 20.0  # pseudo-games shrinking solo-queue lane matchups toward 50%
 STYLE_HALF_LIFE_DAYS = 120.0
@@ -147,12 +147,15 @@ def soloq_matchups(cmap: pl.DataFrame, champions: pl.DataFrame) -> dict[tuple[st
     return out
 
 
-def build_live() -> Live:
-    inp = inputs()
+def build_live(inp: state.Inputs | None = None, team_names: dict[str, str] | None = None) -> Live:
+    """Refit the production models on every game. Inputs and team names default to data_local (tests pass their own)."""
+    inp = inp or inputs()
     outcome_rows, act, builder = state.build_with_state(inp)
     actions = act.rows.with_row_index("idx")
     ranker = LambdaRank()
     ranker.fit(actions, act)
+    ranker.act = None  # its training set: only evaluation's scores() reads it; live drafts pass their own
+    builder.slim()
     model = LogisticFeatures(L3)
     model.fit(outcome_rows)
     ctx = game_context(inp.games, inp.series)
@@ -162,9 +165,9 @@ def build_live() -> Live:
     now = last + timedelta(days=1)
     patches = sorted(inp.games["patch"].drop_nulls().unique().to_list(), key=patch_key)
     tags = champion_tags(inp)
-    names = {}
+    names = team_names or {}
     teams_path = settings().local("aggregates") / "stats_teams.parquet"
-    if teams_path.exists():
+    if team_names is None and teams_path.exists():
         names = dict(pl.read_parquet(teams_path).select("team_id", "name").iter_rows())
     return Live(
         builder=builder,
@@ -176,8 +179,7 @@ def build_live() -> Live:
         patch=patches[-1] if patches else None,
         now=now,
         last_game=dict(
-            game_context(inp.games, inp.series)
-            .unpivot(["blue_team_id", "red_team_id"], index="started_at", value_name="team_id")
+            ctx.unpivot(["blue_team_id", "red_team_id"], index="started_at", value_name="team_id")
             .group_by("team_id")
             .agg(pl.col("started_at").max())
             .iter_rows()

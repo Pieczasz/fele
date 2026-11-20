@@ -1,0 +1,7 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "ignore": ["src/api/schema.d.ts"],
+  "ignoreBinaries": ["uv"],
+  "ignoreExportsUsedInFile": true,
+  "rules": { "types": "off" }
+}

@@ -411,6 +411,12 @@ still open.
 5. Video script (< 3 min): 0:00 problem (coach spreadsheet) → 0:20 scouting report → 1:00 Fearless series planner → 1:50 mock draft with live win probability and reasons → 2:30 how it's built (JetBrains + ML validation) → 2:50 close. No broadcast footage, no copyrighted music.
 6. Final checklist (Section 7).
 
+**Status (2026-11-20):** in progress. Done without the human: judge-facing `README.md` (problem, flow, architecture,
+honest results), `docs/VIDEO_SCRIPT.md`, the live context slimmed to the state the server needs (161 MB → 5 MB, no
+per-game draft rows), CI gates for dead code and vulnerable dependencies, a synthetic draft world so CI tests the
+engine end to end. Waiting on the human: hosting choice and the organizer question on hosted aggregates
+(COMPLIANCE §4), screenshots (they show GRID-derived numbers), recording the video.
+
 **🛑 Checkpoint:** human submits on Devpost by 2027-01-09.
 
 ---

@@ -4,7 +4,7 @@ Interactive docs are generated from the code: Swagger UI at /docs, ReDoc at /red
 """
 
 from datetime import timedelta
-from typing import Annotated, Any, Literal
+from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 import polars as pl
 from fastapi import Body, FastAPI, HTTPException, Query, Request, Response
@@ -16,6 +16,9 @@ from fele import prefs
 from fele.api import auth, models
 from fele.api.data import MissingDataError, champion_keys, ddragon_version, table
 from fele.static.ddragon import live_patch
+
+if TYPE_CHECKING:
+    from fele.engine.live import Live
 
 DESCRIPTION = """
 **fele** (short for *Fearless Ledger*) — draft prep and Fearless series planning for League of Legends coaches.
@@ -474,6 +477,13 @@ def champions() -> list[models.ChampionInfo]:
     return [models.ChampionInfo(name=n, key=k, roles=roles.get(k, [])) for n, k in sorted(keys.items())]
 
 
+def _check_champions(live: Live, names: list[str]) -> None:
+    """A typo must not be silently ignored (the engine would draft as if that slot were empty)."""
+    unknown = sorted({c for c in names if c and c not in live.builder.index})
+    if unknown:
+        raise HTTPException(422, f"Unknown champion(s): {', '.join(unknown)}")
+
+
 @app.post("/draft/recommend", tags=["draft"], summary="Ranked options for our next pick/ban, with reasons")
 def draft_recommend(req: models.DraftRequest) -> models.DraftAdvice:
     """Options, never orders: each comes with its evidence. The live win probability completes the draft many times
@@ -492,6 +502,7 @@ def draft_recommend(req: models.DraftRequest) -> models.DraftAdvice:
             game_number=req.game_number,
             series_score=req.series_score,
         )
+        _check_champions(live, [*req.actions, *req.locked, *req.save])
         s = DraftState(req.we_pick_first, locked=frozenset(req.locked))
         for c in req.actions:
             s = s.play(c)
@@ -548,6 +559,7 @@ def series_simulate(req: models.SeriesRequest) -> models.SeriesPlan:
     from fele.engine.live import get_live  # noqa: PLC0415
 
     live = get_live()
+    _check_champions(live, [*req.locked, *req.save])
     sims = req.sims
     prefs_ = req.preferences or prefs.load()
     start = series.SeriesStart(

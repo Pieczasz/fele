@@ -419,6 +419,13 @@ class Builder:
         self.draft_actions(g, self.st.pmi(g["patch"]))
         self.update(g, champs)
 
+    def slim(self) -> None:
+        """Drop the per-game walk data (drafts, rosters, training rows) once result() has been taken. The live engine
+        needs only the accumulated state, and the cached/deployed context then holds no per-game draft rows."""
+        self.drafts, self.roster, self.gt_index = {}, {}, {}
+        self.out_rows, self.team_x, self.act_rows, self.unavailable = [], [], [], []
+        self.own_picks, self.opp_picks, self.synergy, self.opp_synergy = [], [], [], []
+
     def result(self) -> tuple[pl.DataFrame, ActionData]:
         actions = ActionData(
             vocab=self.vocab,

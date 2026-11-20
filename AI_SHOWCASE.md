@@ -266,3 +266,22 @@ One entry per phase of [AGENT_PLAN.md](AGENT_PLAN.md): what was asked, what the 
   present; solo-queue pools are off by default; no data or models are in git. Added a to-do to delete model artifacts
   after judging (GRID licence).
 - **Human corrections:** _(none yet)_
+
+### Test plan, slimmer deploy artifact, judge-facing docs (2026-11-20)
+
+- **Asked:** "continue doing whatever you think is the best".
+- **Agent chose:** finish the test plan before Phase 11, since the recommender and simulator had only real-data tests,
+  which CI can't run.
+- **Agent produced:**
+  - a synthetic world (4 teams of known strength, 60 champions with roles, the pro draft order, hard Fearless) that
+    tests the whole engine in CI: legal options with reasons at every turn, save and must-ban rules, the stronger
+    team favoured, reproducible and Fearless-correct simulations, and the API on top. Engine coverage went from
+    61% to 73%, with the gate raised to 70%;
+  - web smoke tests for the players, macro and coverage pages, taking web coverage from 64% to 72%;
+  - CI steps for deptry, vulture, pip-audit, knip and pnpm audit. deptry found 6 unused packages, now removed;
+  - draft-model slices by draft phase and league. Cloud9's own league (LCS) is the hardest to predict (65% top-10);
+  - a live context slimmed from 161 MB to 5 MB, with no per-game draft rows left in what a demo host would hold;
+  - a judge-facing README and a video script.
+- **Caught along the way:** the synthetic tests found that `/draft/recommend` silently accepted unknown champion
+  names (a typo was drafted as an empty slot). It now returns a 422.
+- **Human corrections:** _(none yet)_

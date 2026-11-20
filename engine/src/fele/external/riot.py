@@ -15,7 +15,6 @@ from collections import deque
 from collections.abc import Sequence
 from http import HTTPStatus
 from pathlib import Path
-from types import TracebackType
 from typing import Any, Self
 
 import httpx
@@ -105,9 +104,7 @@ class RiotClient:
     async def __aenter__(self) -> Self:
         return self
 
-    async def __aexit__(
-        self, exc_type: type[BaseException] | None, exc: BaseException | None, tb: TracebackType | None
-    ) -> None:
+    async def __aexit__(self, *_: object) -> None:
         await self._http.aclose()
 
     def _cache_path(self, url: str) -> Path:

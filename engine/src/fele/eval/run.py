@@ -116,7 +116,7 @@ def run_actions(data: Data, name: str, fold_list: list[splits.Fold] | None = Non
         model.fit(data.actions.filter(_in(fold.train)), data.act)
         test = data.actions.filter(_in(fold.test))
         parts.append(_score_actions(model.scores(test), test, data.act).with_columns(fold=pl.lit(fold.name)))
-    return pl.concat(parts)
+    return pl.concat(parts).join(data.series.select("series_id", "league"), on="series_id", how="left")
 
 
 def learning_curve(data: Data, name: str) -> list[dict[str, float]]:
@@ -279,6 +279,7 @@ def _action_rows(res: Results) -> list[str]:
         "| Model | Slice | Actions | Log loss [95% CI] | Δ vs action_global [95% CI] | Top-1 | Top-5 | Top-10 | MRR |",
         "|---|---|---|---|---|---|---|---|---|",
     ]
+    leagues = sorted(ref["league"].drop_nulls().unique().to_list()) if "league" in ref.columns else []
     for name, preds in sorted(res.actions.items()):
         _same_rows(preds, ref, "game_id")
         for label, cond in (
@@ -286,6 +287,8 @@ def _action_rows(res: Results) -> list[str]:
             ("picks", pl.col("action") == "pick"),
             ("bans", pl.col("action") == "ban"),
             ("G3+", pl.col("game_number") >= LATE_GAME),
+            *((f"phase {p}", pl.col("phase") == p) for p in ("ban1", "pick1", "ban2", "pick2")),
+            *((f"league {lg}", pl.col("league") == lg) for lg in leagues),
         ):
             df = preds.filter(cond)
             r = ref.filter(cond)

@@ -29,7 +29,11 @@ Only sources marked ✅ or ⚠️ (with their conditions met) may be used (AGENT
 - [x] ≥1 JetBrains tool; `.idea` run configurations committed; `AI_SHOWCASE.md` kept current
 - [x] Riot boilerplate (exact LoL wording) in web footer + README
 - [x] Data-leak guard: `.gitignore`, `scripts/check_no_data.sh` (pre-commit + CI, incl. full history)
-- [ ] Demo: private site is allowed **if login credentials are in the testing instructions**; must stay up and free until 2027-02-03 15:00 PT → password gate + cached aggregates
+- [ ] Demo: private site is allowed **if login credentials are in the testing instructions**; must stay up and free until 2027-02-03 15:00 PT → password gate + cached aggregates.
+  What a host would hold: `data_local/aggregates` and `static` (aggregates), and `models/live-v4.pkl` (5 MB: fitted
+  models plus the feature store's accumulated state). That state has no per-game draft rows, but it does keep each
+  player's dated champion history (needed for recency weighting) — include this in the organizer question before
+  deploying.
 - [ ] Video < 3 min, public YouTube, Data Dragon icons + own UI only; no broadcast footage, no copyrighted music, no team/league logos without permission
 - [ ] Recommendations always multiple ranked options with reasons (Riot: don't remove/dictate decisions)
 - [ ] No Elo/MMR shown as a player/team ranking (internal model feature only)

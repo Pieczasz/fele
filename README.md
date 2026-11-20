@@ -6,21 +6,73 @@
 Fearless series planner for League of Legends, built for Cloud9's LoL staff in the
 [Cloud9 x JetBrains "Sky's The Limit" Hackathon 2026](https://cloud9.devpost.com/) (Category 2: Macro Scouting & Draft Management).
 
-> Status: early scaffold (Phase 0–1 of [AGENT_PLAN.md](AGENT_PLAN.md)). Features below are the target, not yet built.
+## The problem
 
-## What it does (target)
+Under **Fearless draft** (2025+), every champion a team picks is gone for the rest of the series, for both teams.
+A Bo5 is no longer five separate drafts but one plan: what to play now, what to save for game 4, what the opponent
+will run out of. Coaches prepare this in spreadsheets today, by hand, from VOD notes and memory.
 
-| Module | Answers |
+fele turns that prep into one tool for Cloud9's coaching staff: scout the opponent from official match data,
+plan the whole series with Fearless locks, and rehearse the draft against a model of how that opponent drafts.
+Every number shows its sample size, and every recommendation is a ranked option with its reasons, never an order.
+
+## What a coach does with it
+
+1. **Pick the opponent → scouting report.** Their draft priorities (by side and by game number in the series), the
+   players opponents ban against, each player's pool size, macro habits vs their league, and **"how to win" cards**:
+   short insights that carry their evidence, e.g. *"⟨champion⟩ is a game-1 priority: they take it in their first
+   rotation in k of their n game 1s"*.
+2. **Plan the series.** The Fearless planner tracks every game, the locks, both teams' remaining pools and a save
+   list ("keep Azir for game 3+"). A Monte Carlo simulation of the rest of the series gives the series win
+   probability, the scenario "what if we lose the next game?", and whether the save plan changes anything beyond
+   noise. Export to CSV or JSON.
+3. **Rehearse the draft.** The mock draft board follows the real 2026 pro draft order. On our turn: five ranked
+   options, each with reasons. On theirs: what this opponent most likely does next. A live win probability with its
+   range sits on top. Keyboard-driven, and a finished draft is saved into the series plan.
+4. **Add what the data can't see.** Coach inputs: each player's comfort tiers and refusals, team style, never-pick
+   and must-ban lists. They're stored in the browser and used by the recommendations immediately.
+
+| Page | Answers |
 |---|---|
-| Opponent scouting | What pick/ban tendencies repeat for this opponent? How does their draft shift in Fearless G3/G4/G5? |
-| Meta & patch view | What's strong in pro play and in current-patch high-elo solo queue? |
-| ML draft engine | Win probability for a draft, opponent pick/ban prediction, ranked recommendations with reasons |
-| Fearless series planner | Monte Carlo over a Bo3/Bo5: pool depletion, what to save for late games |
-| Mock draft board | Real pro draft order, live win probability with uncertainty, keyboard shortcuts |
-| "How to win" cards | Short insights per opponent, each with its evidence count |
-| Coach preferences | Player comfort tiers, "refuses" picks, prio players, save lists — human knowledge the data can't see |
+| Scouting (Draft / Players / Macro) | What repeats for this opponent, with n, league comparison and strong/weak/noise labels |
+| Series planner | What's locked, what's left, what to save; series win probability ± Monte Carlo error |
+| Mock draft | Options for our pick/ban with reasons; their likely next action; live win probability |
+| Meta | Live patch: pro presence, shrunk pro and high-elo solo-queue win rates, patch changes |
+| Coach | Comfort tiers, refusals, style, save / never-pick / must-ban lists |
+| Data | Coverage: games per league and team, solo-queue sample size |
 
-Every number carries its sample size. Recommendations are ranked options with reasons, never orders.
+## How it works
+
+```
+GRID official match data ──► ingest: replay every event feed ──► Parquet tables, inferred roles (99.9% agreement)
+Data Dragon (Riot)        ──► champion map, reviewed role/attribute tags, patch changes
+Riot API (high-elo solo)  ──► live-patch champion strength and lane matchups (aggregates only)
+                                  │
+                                  ▼
+             statistics (Polars): rates with Wilson intervals, empirical-Bayes shrinkage,
+             Benjamini–Hochberg tests, Elo, player pools, macro habits, meta score
+                                  │
+             time-respecting feature store (state as of each game, leakage-tested)
+                                  │
+             models: outcome (Elo; 16 challengers tried) · draft actions (LightGBM LambdaRank)
+                                  │
+             engine: ranked options with reasons, rollout win probability, Fearless series simulator
+                                  │
+             FastAPI (aggregates + cached models only) ──► React web app
+```
+
+**What the models can and can't do** (details: [docs/MODEL_CARD.md](docs/MODEL_CARD.md),
+[docs/METHODOLOGY.md](docs/METHODOLOGY.md)):
+
+- **Predicting the opponent's draft works.** The draft-action model puts the team's actual pick or ban in its top
+  10 options 71% of the time (walk-forward over 8 months), against 51% for champion popularity.
+- **Predicting the winner from the draft barely works, and we say so.** Sixteen models (logistic, Bayesian
+  hierarchical, trees, boosting, kernels, ensembles) failed to beat a plain Elo rating by a significant margin on a
+  locked holdout. So win probabilities are Elo-dominated, and the draft board labels its "draft edge" as weak
+  evidence rather than pretending otherwise.
+- **Validation:** walk-forward folds grouped by series, a holdout used exactly once (decision committed before the
+  run), paired bootstrap intervals, and leakage tests that change future results and require earlier features to
+  stay identical.
 
 ## Repository layout
 
@@ -84,7 +136,9 @@ Pick a team → **Draft** (presence, picks, bans, first rotation and average slo
 series, with league comparison and strong/weak/noise labels; which players opponents ban against), **Players**
 (current lineup, comfort champions, pool size with interval), **Macro** (jungle start side, first objectives vs
 league, objective timings, early-kill heatmap). Plus **Meta** (live patch: pro presence, shrunk pro and solo-queue win
-rates, patch changes) and **Data** (coverage). Every number shows its sample (`7/12`, `n=113`). Light and dark mode.
+rates, patch changes), **Series plan**, **Mock draft** and **Coach** (described above) and **Data** (coverage). Every
+number shows its sample (`7/12`, `n=113`). Light and dark mode. Mock draft keys: `/` search, `1`–`5` take an option,
+`Backspace` undo, `S` skip a ban.
 
 The API serves only precomputed aggregates (`data_local/aggregates`, `data_local/static`), never raw GRID events.
 Set `DEMO_PASSWORD` in `.env` to put a hosted demo behind a password (HttpOnly session cookie; off when empty).
@@ -107,7 +161,8 @@ Strict by default, enforced in CI (`.github/workflows/`) and with `make check` l
 | Python format / types | Ruff formatter · Pyright **strict** |
 | TypeScript | Biome (recommended + all React/test rules + extra strict rules) · `tsc` strict, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes` |
 | Static analysis | **JetBrains Qodana** (Community for Python) on every push/PR, findings in GitHub code scanning · `make qodana` locally |
-| Tests | pytest + coverage gate, Hypothesis available for property tests · Vitest + v8 coverage |
+| Tests | pytest (coverage gate 70%), Hypothesis property tests, a synthetic world for the draft engine · Vitest + v8 coverage |
+| Dead code / dependencies | vulture, deptry, pip-audit (Python) · knip, pnpm audit (web) |
 | Data safety | `scripts/check_no_data.sh` as pre-commit hook and CI step (scans full git history) |
 | Notebooks | `nbstripout` git filter: outputs are never committed |
 
@@ -118,12 +173,12 @@ Installed with `uv sync --all-extras` (extra `ml`) or `make setup`:
 | Need | Library |
 |---|---|
 | DataFrames / SQL | Polars, DuckDB, PyArrow |
-| Classical stats (binomial tests, Benjamini–Hochberg, GLMs) | SciPy, statsmodels |
+| Classical stats (Wilson intervals, binomial tests, Benjamini–Hochberg, beta priors) | SciPy |
 | Models | scikit-learn (logistic, calibration), LightGBM (incl. LambdaRank) |
 | Bayesian / hierarchical models | PyMC + ArviZ |
-| Uncertainty | MAPIE (conformal prediction), bootstrap via NumPy |
+| Uncertainty | bootstrap and paired bootstrap over series (NumPy), Monte Carlo error |
 | Tuning / tracking / explanations | Optuna, MLflow (local store in `data_local/mlruns`), SHAP |
-| Verification | Hypothesis (property tests), Pandera (DataFrame schemas), deptry, pip-audit |
+| Verification | Hypothesis (property tests), deptry, vulture, pip-audit |
 | Exploration | JupyterLab + matplotlib (group `notebook`) |
 
 ## JetBrains tools
@@ -140,8 +195,9 @@ Installed with `uv sync --all-extras` (extra `ml`) or `make setup`:
 
 See [docs/COMPLIANCE.md](docs/COMPLIANCE.md). In short: GRID match data is used locally under the hackathon license and is
 **never committed or redistributed**; the hosted demo serves aggregates only. Static champion data comes from Riot's
-Data Dragon. Current-patch signals come from the official Riot API. Additional pro pick/ban history comes from
-[Leaguepedia](https://lol.fandom.com) contributors (CC BY-SA 3.0), via the `gptilt/lol-esports-matches` dataset.
+Data Dragon. Current-patch signals come from the official Riot API. `fele fetch-leaguepedia-hf` can add pro pick/ban
+history from [Leaguepedia](https://lol.fandom.com) contributors (CC BY-SA 3.0, via the `gptilt/lol-esports-matches`
+dataset) to the local DuckDB catalog for exploration; it is kept separate and not used by the app or the models.
 
 fele is not endorsed by Riot Games and does not reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games and all associated properties are trademarks or registered trademarks of Riot Games, Inc.
 
