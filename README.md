@@ -72,6 +72,7 @@ cd web && pnpm dev                 # http://localhost:5173
 | `prefs-init` | Pre-fills `config/preferences.yaml` with Cloud9's latest lineup, inferred roles and top champions |
 | `stats` | Draft priority, ban targeting, player pools, Elo, macro context, meta score (`aggregates.stats_*`); see `docs/METHODOLOGY.md` |
 | `evaluate` | Walk-forward evaluation of a model and all baselines → `docs/experiments/<date>-<model>.md` + MLflow (`--model baseline_elo`) |
+| `explain` / `holdout` | Coefficients, SHAP and posterior summaries of the Phase 8 models; the one-time final holdout check |
 | `db` | Builds `data_local/fele.duckdb`: views `grid.*`, `lol.*`, `static.*`, `leaguepedia.*`, `soloq.*`, `aggregates.*` |
 | `serve` | API with Swagger UI at `/docs`, ReDoc at `/redoc`, OpenAPI spec at `/openapi.json` |
 

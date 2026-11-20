@@ -82,10 +82,26 @@ not help either.
   roles, pro presence and player comfort; bans deny the opponent's synergy, target opponent player pools and roles the
   opponent still needs.
 
-## Final holdout
+## Final holdout (run once, 2026-11-20 — [`experiments/2026-11-20-holdout.md`](experiments/2026-11-20-holdout.md))
 
-_To be filled by `fele holdout --outcome bayes_hier --action action_lambdarank --confirm` (one run; Elo and the action
-baselines are always scored alongside)._
+Trained on all 633 development series, scored once on the latest 112 series (316 games, 6,319 draft actions; LCS
+2026 + LEC 2026 Spring). The decision above was committed before this run (`ef5a890`).
+
+| Problem | Model | Holdout | Walk-forward (for comparison) |
+|---|---|---|---|
+| A | `baseline_elo` (chosen) | log loss 0.6404 [0.5968, 0.6802], AUC 0.681, accuracy 66.5%, ECE 0.069 | 0.6280, AUC 0.706, 65.2%, ECE 0.032 |
+| A | `bayes_hier` (challenger) | Δ vs Elo −0.0051 [−0.0108, +0.0007], ECE 0.076 | −0.0041 [−0.0097, +0.0018] |
+| B | `action_lambdarank` (chosen) | log loss 3.352, Δ vs global **−0.817** [−0.870, −0.765]; top-1 15.5%, top-10 64.4%, MRR 0.306 | 3.242, −0.607; top-10 68.6%, MRR 0.316 |
+| B | `action_global` (baseline) | log loss 4.169, top-10 40.7% | 3.849, top-10 50.7% |
+
+- **The outcome conclusion holds out of sample:** the challenger is again a little better than Elo and again not
+  significantly so; Elo stays.
+- **Calibration:** Elo's holdout ECE (0.069) is above the 0.05 target, but 316 games can't resolve that: drawing
+  outcomes from Elo's own probabilities, a *perfectly calibrated* model scores ECE 0.056 at the median (90% range
+  0.033–0.084) at this size. On the 1,137 walk-forward games Elo's ECE is 0.032 vs 0.030 for a perfect model.
+- **The draft-action model generalises:** its lead over the baseline grows on the newer patches (the global
+  frequencies go stale faster than the learned features), with top-10 at 64% vs 41%.
+- Cloud9 holdout games (65): Elo log loss 0.654, accuracy 63% — descriptive only.
 
 ## Limits and what the models must not be used for
 

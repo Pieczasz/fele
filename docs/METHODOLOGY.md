@@ -123,3 +123,23 @@ heuristic for the meta view. The Phase 8 models learn their own weights from the
 | Outcome | `baseline_elo` (logistic on pre-game Elo) | log loss **0.628** [0.606, 0.650], AUC 0.706, accuracy 65%, ECE 0.032 |
 | Draft | `action_global` (champion frequency, latest 3 patches) | top-10 **50.7%**, MRR 0.205, log loss 3.85 |
 | Draft | `action_team_slot` (team × action × phase, shrunk to global) | better ranking (top-1 9.9%, MRR 0.222) but worse log loss (+0.21): overconfident on thin team histories |
+
+## Model ladder (Phase 8, `engine/src/fele/models/`, decision in [MODEL_CARD.md](MODEL_CARD.md))
+
+- **Feature store** (`features/state.py`): one chronological pass; each game sees only strictly earlier games, each
+  draft action also the earlier actions of its game and the series' Fearless locks. The champion vocabulary comes from
+  the static champion map (a vocabulary built from the games would itself depend on future drafts — caught by the
+  leakage test). Real-data leakage test: flip every result and scramble every draft after a cutoff; all earlier
+  features must be bit-identical.
+- **Nested validation:** every hyperparameter (penalty, k, leaf size, LightGBM grid / 25-trial Optuna TPE, softmax
+  temperature, Platt/isotonic calibration) is chosen on walk-forward inner folds of each outer training set.
+- **Outcome ladder:** penalised logistic regression (L2/L3 feature sets; Elo unpenalised — uniform shrinkage made
+  the first rung *lose* to Elo by shrinking the strong signal with the noise), champion strengths (signed one-hot),
+  unsupervised archetypes (TruncatedSVD embeddings + k-means), naive Bayes, kNN, random forest, extra trees, RBF SVM,
+  Gaussian process, LightGBM (monotone in Elo; grid and Optuna), calibrated variants, an average, and a hierarchical
+  Bayesian logistic model (PyMC, ADVI) with partially pooled champion and team effects.
+- **Draft-action ladder:** conditional logit over available champions (L2, gradient-checked) and LightGBM
+  LambdaRank with an inner-fold softmax temperature.
+- **Result:** draft actions are very predictable (top-10 69% walk-forward, 64% holdout vs 51% / 41% for the
+  baseline); game outcomes beyond Elo are not — every outcome rung was within ±0.005 log loss of Elo or significantly
+  worse, so Elo stays (promotion rule §5.5). The holdout (opened once) agrees.

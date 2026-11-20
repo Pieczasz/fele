@@ -353,6 +353,8 @@ Also:
 
 **Acceptance:** the chosen model beats the Elo baseline on walk-forward log loss with a paired-bootstrap 95% CI excluding zero, and is calibrated (ECE ≤ 0.05). If nothing beats the baseline meaningfully, report that honestly and keep the simpler model — an honest result is better for the judges than an overfit one.
 
+**Status (2026-11-20):** done. 16 outcome rungs (linear, Bayesian, unsupervised features, trees, kernels, kNN, boosting with Optuna, calibration, ensembles) + 2 draft-action models, all nested-tuned. Outcome: nothing beats Elo significantly → **Elo kept**. Draft actions: **LambdaRank** (top-10 69% → 64% on holdout vs 51% / 41% baseline). Holdout used once (decision committed first). See `docs/MODEL_CARD.md`.
+
 **🛑 Checkpoint:** human reads the model card and approves the model choice.
 
 ---

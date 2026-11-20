@@ -166,3 +166,34 @@ One entry per phase of [AGENT_PLAN.md](AGENT_PLAN.md): what was asked, what the 
   - scikit-learn ships no type stubs: one small adapter module is checked in Pyright basic mode, so the rest stays
     strict.
 - **Human corrections:** _(fill in at checkpoint: review the baseline report)_
+
+### Phase 8 — Model ladder (2026-11-19 → 2026-11-20)
+
+- **Asked:** "make sure we are not overfitting, you can try many python libs, many forms of machine learning:
+  supervised, unsupervised, regressions, parametrized and non parametrized methods, everything possible".
+- **Agent produced:** a time-respecting feature store; 16 outcome models across regularised regression,
+  hierarchical Bayes (PyMC), unsupervised archetypes (SVD + k-means), kNN, random forest, extra trees, RBF SVM,
+  Gaussian process, naive Bayes, LightGBM (grid + Optuna), Platt/isotonic calibration and ensembles; a conditional
+  logit and LambdaRank for draft actions; explanations (coefficients, SHAP, posterior summaries); a model card; and a
+  one-time holdout run.
+- **How overfitting was kept out:**
+  - Features see only the past. A real-data test flips every later result and scrambles every later draft, and
+    requires earlier features to be identical.
+  - All tuning happens on inner folds.
+  - A pre-registered promotion rule decides, with paired series bootstraps.
+  - The decision was committed (`ef5a890`) before the holdout was opened, and the holdout was used exactly once.
+- **Findings:** who wins is barely predictable beyond Elo. Every outcome model landed within 0.005 log loss of Elo
+  or was significantly worse, so Elo stays, and the holdout agrees. The next pick/ban is very predictable:
+  LambdaRank reaches 69% top-10 on the walk-forward folds and 64% on the holdout, against 51% and 41% for the
+  baseline.
+- **Caught along the way:**
+  - The first regularised model *lost* to Elo: uniform L2 shrank the strong Elo signal along with the noise. It now
+    uses a custom penalised logistic regression with Elo unpenalised.
+  - The champion vocabulary was built from the games, so it depended on future drafts. The leakage test caught it;
+    the vocabulary now comes from the static champion map.
+  - kNN crashed when an early inner fold was smaller than k, and the GP constructor ignored its own parameter grid.
+    Both are fixed and covered by smoke tests.
+  - The holdout calibration error (0.069) looked like a failure, but a simulation showed that a perfectly
+    calibrated model scores 0.056 (90% range 0.033–0.084) on 316 games, so it is reported as noise rather than
+    hidden or "fixed".
+- **Human corrections:** _(fill in at checkpoint: approve the model choice in docs/MODEL_CARD.md)_
