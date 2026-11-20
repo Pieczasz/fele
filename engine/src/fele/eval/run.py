@@ -12,13 +12,14 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 
-from fele.config import REPO_ROOT
+from fele.config import REPO_ROOT, settings
 from fele.eval import metrics, splits
-from fele.features.actions import action_frame
-from fele.features.outcome import outcome_frame
+from fele.features import state
 from fele.ingest.grid import read_meta
-from fele.models.baselines import ACTION_MODELS, OUTCOME_MODELS
-from fele.stats.data import read
+from fele.models.registry import ACTION as ACTION_MODELS
+from fele.models.registry import OUTCOME as OUTCOME_MODELS
+from fele.stats import elo
+from fele.stats.data import game_context, read
 
 OUTCOME_REF = "baseline_elo"
 ACTION_REF = "action_global"
@@ -31,10 +32,14 @@ REPORT_DIR = REPO_ROOT / "docs" / "experiments"
 class Data:
     series: pl.DataFrame
     outcome: pl.DataFrame
-    actions: pl.DataFrame
-    vocab: list[str]
+    actions: pl.DataFrame  # ActionData.rows + idx (row index into the ActionData arrays)
+    act: state.ActionData
     folds: list[splits.Fold]
     cloud9: frozenset[str]
+
+    @property
+    def vocab(self) -> list[str]:
+        return self.act.vocab
 
 
 @dataclass
@@ -45,14 +50,28 @@ class Results:
 
 
 def load() -> Data:
-    series, games = read("series"), read("games")
-    draft = read("draft_actions")
-    actions = action_frame(draft, games, read("fearless_state")).join(
-        games.select("game_id", "game_number"), on="game_id"
+    games, series = read("games"), read("series")
+    ctx = game_context(games, series)
+    static = settings().local("static")
+    outcome, act = state.build(
+        state.Inputs(
+            games=games,
+            series=series,
+            draft=read("draft_actions"),
+            parts=read("participants"),
+            fearless=read("fearless_state"),
+            champions=pl.read_parquet(static / "champions.parquet"),
+            cmap=pl.read_parquet(static / "champion_map.parquet"),
+            deltas=pl.read_parquet(static / "patch_deltas.parquet"),
+            elo=elo.game_elo(ctx),
+        )
     )
-    vocab = sorted(set(draft["champion"].drop_nulls().to_list()))
+    outcome = outcome.join(ctx.select("game_id", "game_bucket"), on="game_id").with_columns(
+        elo_diff=pl.col("d_elo"), patch_age=state.patch_age()
+    )
     cloud9 = frozenset(t["team_id"] for t in read_meta("teams") if "Cloud9" in t["name"])
-    return Data(series, outcome_frame(games, series), actions, vocab, splits.outer_folds(series), cloud9)
+    actions = act.rows.with_row_index("idx")
+    return Data(series, outcome, actions, act, splits.outer_folds(series), cloud9)
 
 
 def _in(ids: frozenset[str]) -> pl.Expr:
@@ -72,27 +91,26 @@ def run_outcome(data: Data, name: str, fold_list: list[splits.Fold] | None = Non
     )
 
 
-def _score_actions(scores: np.ndarray, rows: pl.DataFrame, vocab: list[str]) -> pl.DataFrame:
-    index = {c: i for i, c in enumerate(vocab)}
-    probs = scores.copy()
-    for r, unavailable in enumerate(rows["unavailable"].to_list()):
-        probs[r, [index[c] for c in unavailable if c in index]] = 0.0
+def _score_actions(scores: np.ndarray, rows: pl.DataFrame, act: state.ActionData) -> pl.DataFrame:
+    """Mask unavailable champions, renormalise, and read off the probability and rank of the true champion."""
+    idx = rows["idx"].to_numpy()
+    probs = np.where(act.unavailable[idx], 0.0, np.maximum(scores, 0.0))
     probs /= probs.sum(axis=1, keepdims=True)
-    true_idx = np.array([index.get(c, -1) for c in rows["champion"].to_list()])
-    p_true = np.where(true_idx >= 0, probs[np.arange(len(true_idx)), np.maximum(true_idx, 0)], 0.0)
+    true_idx = rows["y"].to_numpy()
+    p_true = probs[np.arange(len(true_idx)), true_idx]
     rank = 1 + (probs > p_true[:, None]).sum(axis=1)
     return rows.select("series_id", "game_id", "action", "phase", "game_number").with_columns(
         p_true=pl.Series(p_true), rank=pl.Series(rank)
     )
 
 
-def run_actions(data: Data, name: str) -> pl.DataFrame:
+def run_actions(data: Data, name: str, fold_list: list[splits.Fold] | None = None) -> pl.DataFrame:
     parts: list[pl.DataFrame] = []
-    for fold in data.folds:
+    for fold in fold_list or data.folds:
         model = ACTION_MODELS[name]()
-        model.fit(data.actions.filter(_in(fold.train)), data.vocab)
+        model.fit(data.actions.filter(_in(fold.train)), data.act)
         test = data.actions.filter(_in(fold.test))
-        parts.append(_score_actions(model.scores(test), test, data.vocab).with_columns(fold=pl.lit(fold.name)))
+        parts.append(_score_actions(model.scores(test), test, data.act).with_columns(fold=pl.lit(fold.name)))
     return pl.concat(parts)
 
 
@@ -112,17 +130,80 @@ def learning_curve(data: Data, name: str) -> list[dict[str, float]]:
     return rows
 
 
-def evaluate(model: str) -> tuple[Data, Results]:
-    """Run `model` plus every baseline of both problems (the bar to beat)."""
+BASELINES = ("baseline_constant", "baseline_blue", "baseline_elo")
+ACTION_BASELINES = ("action_global", "action_team_slot")
+
+
+def evaluate(models: list[str]) -> tuple[Data, Results, str]:
+    """Run `models` plus every baseline of both problems (the bar to beat). Returns the outcome model in focus."""
     data = load()
     res = Results()
-    for name in {*OUTCOME_MODELS, model} & set(OUTCOME_MODELS):
+    for name in dict.fromkeys([*BASELINES, *(m for m in models if m in OUTCOME_MODELS)]):
         res.outcome[name] = run_outcome(data, name)
-    for name in {*ACTION_MODELS, model} & set(ACTION_MODELS):
+    for name in dict.fromkeys([*ACTION_BASELINES, *(m for m in models if m in ACTION_MODELS)]):
         res.actions[name] = run_actions(data, name)
-    focus = model if model in OUTCOME_MODELS else OUTCOME_REF
+    focus = focus_model(res, models)
     res.learning = learning_curve(data, focus)
+    return data, res, focus
+
+
+def evaluate_holdout(outcome: str, action: str, *, confirm: bool) -> tuple[Data, Results]:
+    """The single final check: train on every development series, score the latest 15% once (recorded)."""
+    data = load()
+    fold = splits.holdout_split(data.series, confirm=confirm, note=f"outcome={outcome}, action={action}")
+    res = Results()
+    for name in dict.fromkeys([*BASELINES, outcome]):
+        res.outcome[name] = run_outcome(data, name, [fold])
+    for name in dict.fromkeys([*ACTION_BASELINES, action]):
+        res.actions[name] = run_actions(data, name, [fold])
     return data, res
+
+
+def holdout_report(outcome: str, action: str, data: Data, res: Results) -> str:
+    preds = res.outcome[outcome]
+    held = preds["fold"].len()
+    n_hold = len(splits.holdout_ids(data.series))
+    n_dev = data.series.height - n_hold
+    return "\n".join(
+        [
+            f"# Final holdout: `{outcome}` + `{action}`",
+            "",
+            (
+                f"Generated {datetime.now(UTC):%Y-%m-%d %H:%M} UTC by `fele holdout`. Run once; recorded in "
+                "`data_local/holdout_used.json`."
+            ),
+            "",
+            f"- Trained on all {n_dev} development series; tested once on the latest {n_hold} series ({held} games).",
+            "- The models were chosen on the walk-forward folds before this run.",
+            "",
+            "## Problem A — who wins",
+            "",
+            *_outcome_rows(res),
+            "",
+            "### By slice",
+            "",
+            *_slices(preds),
+            "",
+            "## Problem B — next pick or ban",
+            "",
+            *_action_rows(res),
+            "",
+        ]
+    )
+
+
+def focus_model(res: Results, models: list[str]) -> str:
+    """The detailed sections follow the listed outcome model with the lowest pooled log loss (or the Elo baseline).
+
+    Picking the best of many on the same folds is optimistic (winner's curse); the final holdout, used once, is the
+    unbiased check of whatever is chosen.
+    """
+    candidates = [m for m in models if m in res.outcome and m not in BASELINES] or [OUTCOME_REF]
+    return min(candidates, key=lambda m: float(log_losses_of(res.outcome[m]).mean()))
+
+
+def log_losses_of(preds: pl.DataFrame) -> np.ndarray:
+    return metrics.log_losses(preds["y"].to_numpy(), preds["p"].to_numpy())
 
 
 # --- report -----------------------------------------------------------------------------------------------------
@@ -215,8 +296,7 @@ def _action_rows(res: Results) -> list[str]:
     return lines
 
 
-def report(model: str, data: Data, res: Results) -> str:
-    focus = model if model in OUTCOME_MODELS else OUTCOME_REF
+def report(model: str, focus: str, data: Data, res: Results) -> str:
     preds = res.outcome[focus]
     holdout = splits.holdout_ids(data.series)
     held_days = splits.series_order(data.series).filter(_in(holdout))["started_at"].dt.strftime("%Y-%m-%d")

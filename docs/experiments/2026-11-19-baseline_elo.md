@@ -1,10 +1,10 @@
 # Evaluation: `baseline_elo`
 
-Generated 2026-11-19 21:12 UTC by `fele evaluate --model baseline_elo`.
+Generated 2026-11-19 21:33 UTC by `fele evaluate --model baseline_elo`.
 
 ## Protocol
 
-- 1737 games / 34645 draft actions in 745 series.
+- 1737 games / 34644 draft actions in 745 series.
 - **Final holdout (locked):** the latest 112 series (2026-02-27 – 2026-10-12). Not used here.
 - **Walk-forward folds:** 8 test months (2025-04 … 2026-02); each trains on every earlier series. Splits are by series.
 - **95% CIs** resample series (2,000 draws). Δ = model - reference; below 0 means lower (better) loss.
@@ -79,14 +79,14 @@ Probability over available champions (earlier picks/bans of the game and Fearles
 
 | Model | Slice | Actions | Log loss [95% CI] | Δ vs action_global [95% CI] | Top-1 | Top-5 | Top-10 | MRR |
 |---|---|---|---|---|---|---|---|---|
-| `action_global` | all | 22655 | 3.850 [3.830, 3.871] | — | 0.079 | 0.314 | 0.507 | 0.205 |
-| `action_global` | picks | 11332 | 3.913 [3.894, 3.933] | — | 0.077 | 0.288 | 0.470 | 0.196 |
-| `action_global` | bans | 11323 | 3.786 [3.756, 3.818] | — | 0.082 | 0.340 | 0.543 | 0.214 |
-| `action_global` | G3+ | 5364 | 3.767 [3.734, 3.801] | — | 0.093 | 0.346 | 0.525 | 0.225 |
-| `action_team_slot` | all | 22655 | 4.062 [4.029, 4.095] | 0.212 [0.190, 0.233] | 0.099 | 0.333 | 0.497 | 0.222 |
-| `action_team_slot` | picks | 11332 | 4.137 [4.102, 4.172] | 0.224 [0.200, 0.249] | 0.085 | 0.305 | 0.468 | 0.205 |
-| `action_team_slot` | bans | 11323 | 3.986 [3.938, 4.037] | 0.200 [0.171, 0.229] | 0.112 | 0.360 | 0.526 | 0.239 |
-| `action_team_slot` | G3+ | 5364 | 4.127 [4.069, 4.181] | 0.360 [0.321, 0.396] | 0.106 | 0.334 | 0.505 | 0.230 |
+| `action_global` | all | 22654 | 3.849 [3.830, 3.870] | — | 0.079 | 0.314 | 0.507 | 0.205 |
+| `action_global` | picks | 11332 | 3.912 [3.894, 3.933] | — | 0.077 | 0.288 | 0.470 | 0.196 |
+| `action_global` | bans | 11322 | 3.786 [3.756, 3.817] | — | 0.082 | 0.341 | 0.543 | 0.215 |
+| `action_global` | G3+ | 5364 | 3.766 [3.732, 3.800] | — | 0.093 | 0.347 | 0.526 | 0.225 |
+| `action_team_slot` | all | 22654 | 4.061 [4.029, 4.094] | 0.212 [0.191, 0.234] | 0.099 | 0.333 | 0.498 | 0.222 |
+| `action_team_slot` | picks | 11332 | 4.136 [4.102, 4.171] | 0.224 [0.199, 0.249] | 0.085 | 0.305 | 0.468 | 0.205 |
+| `action_team_slot` | bans | 11322 | 3.986 [3.941, 4.034] | 0.200 [0.172, 0.229] | 0.112 | 0.360 | 0.527 | 0.239 |
+| `action_team_slot` | G3+ | 5364 | 4.125 [4.068, 4.180] | 0.359 [0.321, 0.396] | 0.107 | 0.334 | 0.507 | 0.230 |
 
 ## Reading this
 

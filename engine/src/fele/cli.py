@@ -270,14 +270,19 @@ def stats() -> None:
 
 @app.command()
 def evaluate(model: str = "baseline_elo", mlflow: bool = True) -> None:
-    """Walk-forward evaluation of a model and all baselines -> docs/experiments/<date>-<model>.md (+ MLflow run)."""
-    from fele.eval import run
-    from fele.models.baselines import ACTION_MODELS, OUTCOME_MODELS
+    """Walk-forward evaluation of models + all baselines -> docs/experiments/<date>-<model>.md (+ MLflow run).
 
-    if model not in {*OUTCOME_MODELS, *ACTION_MODELS}:
-        die(f"Unknown model {model!r}; choose from {sorted({*OUTCOME_MODELS, *ACTION_MODELS})}")
-    data, res = run.evaluate(model)
-    path = run.write_report(model, run.report(model, data, res))
+    `--model` takes a name, a comma-separated list, or a group (`ladder` = every Phase 8 outcome rung).
+    """
+    from fele.eval import run
+    from fele.models.registry import resolve
+
+    try:
+        names = resolve(model)
+    except ValueError as e:
+        die(str(e))
+    data, res, focus = run.evaluate(names)
+    path = run.write_report(model.replace(",", "+"), run.report(model, focus, data, res))
     typer.echo(f"report -> {path}")
     if mlflow:
         from fele.eval.tracking import log_mlflow
@@ -286,6 +291,29 @@ def evaluate(model: str = "baseline_elo", mlflow: bool = True) -> None:
         typer.echo(
             f"MLflow run {run_id} (data_local/mlflow.db)" if run_id else "MLflow not installed: uv sync --extra ml"
         )
+
+
+@app.command()
+def holdout(outcome: str, action: str, confirm: bool = False) -> None:
+    """ONE-TIME final evaluation of the chosen models on the locked holdout (needs --confirm; recorded)."""
+    from fele.eval import run, splits
+
+    try:
+        data, res = run.evaluate_holdout(outcome, action, confirm=confirm)
+    except splits.HoldoutLockedError as e:
+        die(str(e))
+    path = run.write_report("holdout", run.holdout_report(outcome, action, data, res))
+    typer.echo(f"report -> {path}")
+
+
+@app.command()
+def explain() -> None:
+    """Coefficients / SHAP / posterior summaries of the Phase 8 candidates -> docs/experiments/<date>-explain.md."""
+    from fele.eval import run
+    from fele.eval.explain import explain as build
+
+    path = run.write_report("explain", build(run.load()))
+    typer.echo(f"report -> {path}")
 
 
 @app.command()

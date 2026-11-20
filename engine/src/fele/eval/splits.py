@@ -70,6 +70,21 @@ def inner_folds(series: pl.DataFrame, train: frozenset[str], k: int = INNER_FOLD
     ]
 
 
+def inner_masks(rows: pl.DataFrame, k: int = INNER_FOLDS) -> list[tuple[pl.Series, pl.Series]]:
+    """Walk-forward (train, valid) boolean masks over `rows` (any frame with series_id, started_at) for tuning.
+
+    Series are ordered by first start time and cut into k + 1 equal chunks; inner fold i trains on chunks ≤ i and
+    validates on chunk i + 1. Used inside a model's fit(), so tuning never sees the outer test month.
+    """
+    order = rows.group_by("series_id").agg(pl.col("started_at").min()).sort("started_at", "series_id")["series_id"]
+    size = len(order) // (k + 1)
+    out: list[tuple[pl.Series, pl.Series]] = []
+    for i in range(k):
+        train_ids, valid_ids = order[: size * (i + 1)], order[size * (i + 1) : size * (i + 2)]
+        out.append((rows["series_id"].is_in(train_ids.implode()), rows["series_id"].is_in(valid_ids.implode())))
+    return out
+
+
 class HoldoutLockedError(RuntimeError):
     pass
 

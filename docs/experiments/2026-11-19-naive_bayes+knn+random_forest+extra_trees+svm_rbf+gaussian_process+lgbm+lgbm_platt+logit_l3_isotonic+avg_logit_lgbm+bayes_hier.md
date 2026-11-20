@@ -1,0 +1,106 @@
+# Evaluation: `naive_bayes,knn,random_forest,extra_trees,svm_rbf,gaussian_process,lgbm,lgbm_platt,logit_l3_isotonic,avg_logit_lgbm,bayes_hier`
+
+Generated 2026-11-19 21:53 UTC by `fele evaluate --model naive_bayes,knn,random_forest,extra_trees,svm_rbf,gaussian_process,lgbm,lgbm_platt,logit_l3_isotonic,avg_logit_lgbm,bayes_hier`.
+
+## Protocol
+
+- 1737 games / 34644 draft actions in 745 series.
+- **Final holdout (locked):** the latest 112 series (2026-02-27 – 2026-10-12). Not used here.
+- **Walk-forward folds:** 8 test months (2025-04 … 2026-02); each trains on every earlier series. Splits are by series.
+- **95% CIs** resample series (2,000 draws). Δ = model - reference; below 0 means lower (better) loss.
+
+## Problem A — who wins the game
+
+| Model | Log loss [95% CI] | Δ vs baseline_elo [95% CI] | Brier | AUC | Accuracy | ECE |
+|---|---|---|---|---|---|---|
+| `avg_logit_lgbm` | 0.6279 [0.6056, 0.6490] | -0.0001 [-0.0053, 0.0050] | 0.2189 | 0.704 | 0.652 | 0.025 |
+| `baseline_blue` | 0.6932 [0.6894, 0.6973] | 0.0652 [0.0430, 0.0873] | 0.2500 | 0.501 | 0.516 | 0.017 |
+| `baseline_constant` | 0.6931 [0.6931, 0.6931] | 0.0651 [0.0432, 0.0876] | 0.2500 | 0.500 | 0.484 | 0.016 |
+| `baseline_elo` | 0.6280 [0.6055, 0.6499] | — | 0.2189 | 0.706 | 0.652 | 0.032 |
+| `bayes_hier` | 0.6239 [0.5978, 0.6495] | -0.0041 [-0.0097, 0.0018] | 0.2172 | 0.711 | 0.661 | 0.035 |
+| `extra_trees` | 0.6481 [0.6350, 0.6604] | 0.0201 [0.0067, 0.0327] | 0.2282 | 0.683 | 0.631 | 0.050 |
+| `gaussian_process` | 0.6523 [0.6275, 0.6756] | 0.0243 [0.0150, 0.0338] | 0.2293 | 0.673 | 0.620 | 0.039 |
+| `knn` | 0.6374 [0.6186, 0.6554] | 0.0094 [-0.0026, 0.0207] | 0.2233 | 0.692 | 0.636 | 0.040 |
+| `lgbm` | 0.6423 [0.6216, 0.6609] | 0.0143 [0.0040, 0.0237] | 0.2252 | 0.683 | 0.653 | 0.034 |
+| `lgbm_platt` | 0.6526 [0.6315, 0.6725] | 0.0246 [0.0121, 0.0364] | 0.2297 | 0.670 | 0.621 | 0.022 |
+| `logit_l3_isotonic` | 0.6459 [0.6165, 0.6784] | 0.0179 [-0.0002, 0.0382] | 0.2198 | 0.700 | 0.644 | 0.037 |
+| `naive_bayes` | 0.7777 [0.7178, 0.8375] | 0.1497 [0.1041, 0.1952] | 0.2496 | 0.692 | 0.639 | 0.148 |
+| `random_forest` | 0.6432 [0.6243, 0.6617] | 0.0152 [0.0035, 0.0260] | 0.2260 | 0.681 | 0.639 | 0.031 |
+| `svm_rbf` | 0.6559 [0.6393, 0.6717] | 0.0279 [0.0138, 0.0418] | 0.2319 | 0.658 | 0.616 | 0.027 |
+
+### `bayes_hier` per fold
+
+| Test month | Train series | Train games | Test games | Log loss | Accuracy |
+|---|---|---|---|---|---|
+| 2025-04 | 135 | 284 | 238 | 0.5996 | 0.689 |
+| 2025-05 | 267 | 522 | 235 | 0.5796 | 0.694 |
+| 2025-06 | 361 | 757 | 80 | 0.7256 | 0.550 |
+| 2025-07 | 383 | 837 | 51 | 0.5280 | 0.706 |
+| 2025-08 | 405 | 888 | 253 | 0.6192 | 0.644 |
+| 2025-09 | 501 | 1141 | 144 | 0.6434 | 0.694 |
+| 2026-01 | 538 | 1285 | 55 | 0.6829 | 0.618 |
+| 2026-02 | 586 | 1340 | 81 | 0.7244 | 0.580 |
+
+### `bayes_hier` by slice
+
+| Slice | Games | Log loss | Accuracy | ECE |
+|---|---|---|---|---|
+| all | 1137 | 0.6239 | 0.661 | 0.035 |
+| Cloud9 games | 66 | 0.6260 | 0.667 | 0.100 |
+| league = LCK | 445 | 0.5968 | 0.694 | 0.048 |
+| league = LCS | 45 | 0.7103 | 0.578 | 0.162 |
+| league = LEC | 298 | 0.6316 | 0.668 | 0.051 |
+| league = LTA Cross-Conference | 22 | 0.5714 | 0.864 | 0.303 |
+| league = LTA North | 163 | 0.6007 | 0.663 | 0.073 |
+| league = LTA South | 164 | 0.6901 | 0.549 | 0.072 |
+| game_bucket = G1 | 497 | 0.6066 | 0.666 | 0.065 |
+| game_bucket = G2 | 370 | 0.6183 | 0.662 | 0.041 |
+| game_bucket = G3+ | 270 | 0.6636 | 0.648 | 0.078 |
+| patch_age = week 1 | 510 | 0.6307 | 0.649 | 0.045 |
+| patch_age = week 2 | 491 | 0.6100 | 0.666 | 0.024 |
+| patch_age = week 3+ | 136 | 0.6489 | 0.684 | 0.158 |
+
+### `bayes_hier` calibration
+
+| Predicted | Games | Mean prediction | Blue win rate |
+|---|---|---|---|
+| 0.0–0.1 | 14 | 0.078 | 0.143 |
+| 0.1–0.2 | 51 | 0.156 | 0.196 |
+| 0.2–0.3 | 108 | 0.255 | 0.306 |
+| 0.3–0.4 | 152 | 0.349 | 0.362 |
+| 0.4–0.5 | 165 | 0.455 | 0.382 |
+| 0.5–0.6 | 204 | 0.550 | 0.549 |
+| 0.6–0.7 | 172 | 0.650 | 0.599 |
+| 0.7–0.8 | 135 | 0.746 | 0.726 |
+| 0.8–0.9 | 109 | 0.844 | 0.798 |
+| 0.9–1.0 | 27 | 0.922 | 0.889 |
+
+### `bayes_hier` learning curve (most recent share of each fold's training series)
+
+| Training share | Log loss |
+|---|---|
+| 25% | 0.6297 |
+| 50% | 0.6256 |
+| 75% | 0.6260 |
+| 100% | 0.6239 |
+
+## Problem B — which champion is picked or banned next
+
+Probability over available champions (earlier picks/bans of the game and Fearless-locked champions removed).
+
+| Model | Slice | Actions | Log loss [95% CI] | Δ vs action_global [95% CI] | Top-1 | Top-5 | Top-10 | MRR |
+|---|---|---|---|---|---|---|---|---|
+| `action_global` | all | 22654 | 3.849 [3.830, 3.870] | — | 0.079 | 0.314 | 0.507 | 0.205 |
+| `action_global` | picks | 11332 | 3.912 [3.894, 3.933] | — | 0.077 | 0.288 | 0.470 | 0.196 |
+| `action_global` | bans | 11322 | 3.786 [3.756, 3.817] | — | 0.082 | 0.341 | 0.543 | 0.215 |
+| `action_global` | G3+ | 5364 | 3.766 [3.732, 3.800] | — | 0.093 | 0.347 | 0.526 | 0.225 |
+| `action_team_slot` | all | 22654 | 4.061 [4.029, 4.094] | 0.212 [0.191, 0.234] | 0.099 | 0.333 | 0.498 | 0.222 |
+| `action_team_slot` | picks | 11332 | 4.136 [4.102, 4.171] | 0.224 [0.199, 0.249] | 0.085 | 0.305 | 0.468 | 0.205 |
+| `action_team_slot` | bans | 11322 | 3.986 [3.941, 4.034] | 0.200 [0.172, 0.229] | 0.112 | 0.360 | 0.527 | 0.239 |
+| `action_team_slot` | G3+ | 5364 | 4.125 [4.068, 4.180] | 0.359 [0.321, 0.396] | 0.107 | 0.334 | 0.507 | 0.230 |
+
+## Reading this
+
+- A coin flip scores log loss 0.6931. These baselines are the bar: a Phase 8 model is promoted only if its
+  Δ CI vs `baseline_elo` is entirely below 0, ECE ≤ 0.05, and it is not worse on the G3+ slice (§5.5).
+- Small slices (Cloud9, single months) are descriptive: read their n before their numbers.

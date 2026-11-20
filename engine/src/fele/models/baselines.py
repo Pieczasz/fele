@@ -1,7 +1,7 @@
 """Baselines (AGENT_PLAN.md §5.5, rungs L0–L1): the bar every later model has to beat.
 
-Outcome models take outcome_frame rows and return P(blue wins). Action models return, for each draft action, a
-probability over the champion vocabulary (unavailable champions get 0, the rest sum to 1).
+Outcome models take feature-store rows (fele.features.state) and return P(blue wins). Action models return, for
+each draft action, a probability over the champion vocabulary (unavailable champions get 0, the rest sum to 1).
 """
 
 from typing import Protocol
@@ -10,6 +10,7 @@ import numpy as np
 import numpy.typing as npt
 import polars as pl
 
+from fele.features.state import ActionData
 from fele.models.sk import Logistic
 from fele.static.ddragon import patch_key
 
@@ -26,7 +27,7 @@ class OutcomeModel(Protocol):
 
 
 class ActionModel(Protocol):
-    def fit(self, train: pl.DataFrame, vocab: list[str]) -> None: ...
+    def fit(self, train: pl.DataFrame, act: ActionData) -> None: ...
     def scores(self, rows: pl.DataFrame) -> Floats: ...  # rows x vocab, unnormalised, before availability masking
 
 
@@ -98,7 +99,8 @@ class GlobalFrequency:
         self.dist: dict[object, Floats] = {}
         self.vocab: list[str] = []
 
-    def fit(self, train: pl.DataFrame, vocab: list[str]) -> None:
+    def fit(self, train: pl.DataFrame, act: ActionData) -> None:
+        vocab = act.vocab
         counts = _counts(recent_patches(train), ["action"], vocab)
         self.dist = {k[0]: (v + PSEUDO) / (v + PSEUDO).sum() for k, v in counts.items()}
         self.vocab = vocab
@@ -116,9 +118,9 @@ class TeamSlotFrequency:
         self.base = GlobalFrequency()
         self.team: dict[tuple[object, ...], Floats] = {}
 
-    def fit(self, train: pl.DataFrame, vocab: list[str]) -> None:
-        self.base.fit(train, vocab)
-        self.team = _counts(recent_patches(train), ["team_id", "action", "phase"], vocab)
+    def fit(self, train: pl.DataFrame, act: ActionData) -> None:
+        self.base.fit(train, act)
+        self.team = _counts(recent_patches(train), ["team_id", "action", "phase"], act.vocab)
 
     def scores(self, rows: pl.DataFrame) -> Floats:
         base = self.base.scores(rows)
