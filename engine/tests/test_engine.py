@@ -6,7 +6,7 @@ from hypothesis import strategies as st
 
 from fele.engine.draft import THEM, US, DraftState
 from fele.engine.recommend import coach_for_opponent, comp_fit, saved_for_later, style_fit
-from fele.engine.series import _blocked  # pyright: ignore[reportPrivateUsage]
+from fele.engine.series import blocked_champions
 from fele.prefs import ChampionNote, Comfort, PlayerPrefs, Preferences, Role, SeriesStrategy
 
 
@@ -128,4 +128,4 @@ def test_one_players_refusal_does_not_block_a_teammates_champion():
             PlayerPrefs(name="Mid", role=Role.mid, pool=[ChampionNote(champion="Zoe", comfort=Comfort.refuses)]),
         ],
     )
-    assert _blocked(prefs, {}, game=3) == {"Zoe"}
+    assert blocked_champions(prefs, {}, game=3) == {"Zoe"}

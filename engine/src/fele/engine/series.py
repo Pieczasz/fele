@@ -63,7 +63,7 @@ class _Sim:
         return self.wins >= need or self.losses >= need
 
 
-def _blocked(prefs: Preferences | None, save: dict[str, int], game: int) -> set[str]:
+def blocked_champions(prefs: Preferences | None, save: dict[str, int], game: int) -> set[str]:
     """Champions our side won't pick this game: saved for later, never-pick, and refusals no teammate covers (the
     simulated draft doesn't know which player takes a pick, so one player's refusal can't block it for everyone)."""
     out = saved_for_later(prefs, save, game)
@@ -148,7 +148,7 @@ def simulate(  # noqa: PLR0913 - one series setup
             if not group:
                 continue
             m = matchup(live, us, them, we_are_blue=blue, game_number=game)
-            states = _draft(live, m, group, _blocked(prefs, save or {}, game), rng)
+            states = _draft(live, m, group, blocked_champions(prefs, save or {}, game), rng)
             for r, st in zip(group, states, strict=True):
                 m.series_score = r.wins - r.losses
                 won = rng.random() < win_prob(m, st.picks(US), st.picks(THEM))
