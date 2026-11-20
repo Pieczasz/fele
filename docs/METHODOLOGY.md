@@ -179,3 +179,19 @@ composition, style and lane) matches pros slightly *less* (15.1% / 47.8%) — ex
 pull away from "what pros do here". Whether that wins more can't be measured: draft effects on win probability are
 below what this data can detect (Phase 8). The Fearless property test found and fixed a simulator bug (a series could
 play twice in one round).
+
+## "How to win" cards (Phase 10, `GET /teams/{id}/cards`)
+
+Cards only restate numbers computed elsewhere, each with its evidence count and a strength label:
+
+| Kind | Source | Rule |
+|---|---|---|
+| draft | `stats_team_draft`, game-1 split | first-rotation pick/ban rate, ≥ 5 game 1s and ≥ 3 occurrences, top 2 |
+| draft | `stats_team_draft`, all games | `strong` tendency (BH q-value) above the league rate, largest gap, top 2 |
+| players | `stats_ban_targets` | the player whose pool absorbs the most bans faced |
+| players | `/players` | current player (n ≥ 20) with the smallest effective pool, with its 95% interval |
+| macro | `stats_macro_rates` | 3 non-noise tendencies with the lowest p-value |
+| model | LambdaRank, live context | their 3 likeliest first bans / first picks vs us, with the holdout top-10 hit rate |
+
+The series planner and mock draft run in the browser on top of `/draft/recommend` and `/series/simulate`; the plan
+and coach inputs live in `localStorage` and can be exported as JSON (plan also as CSV).

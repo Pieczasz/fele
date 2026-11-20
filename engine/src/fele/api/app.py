@@ -234,6 +234,155 @@ def players(team_id: str) -> models.Players:
     return models.Players(team=team, players=out)
 
 
+MACRO_TEXT = {
+    "jungle_top_start": (
+        "Jungler starts on the top half",
+        "expect early top-side pressure; plan the invade or counter",
+    ),
+    "got_first_scuttle": ("Wins the first scuttle", "contest the river at ~3:30 or trade elsewhere"),
+    "got_first_blood": ("Gets first blood", "respect their early skirmishing"),
+    "got_first_tower": ("Takes the first tower", "expect early lane swaps/plates focus"),
+    "got_first_drake": ("Takes the first drake", "decide early whether to contest or trade for grubs"),
+    "got_first_grubs": ("Takes the first grubs", "decide early whether to contest or trade for drake"),
+    "got_first_herald": ("Takes the first herald", "track their jungler around 14:00"),
+    "grubs_before_drake": ("Prioritises grubs before drake", "the bot side is where they give ground early"),
+}
+CARD_MIN_GAMES = 5
+
+
+def _draft_cards(team_id: str) -> list[models.Card]:
+    draft = table("stats_team_draft").filter(pl.col("team_id") == team_id, pl.col("period") == "all")
+    g1 = draft.filter(pl.col("split") == "G1", pl.col("n") >= CARD_MIN_GAMES, pl.col("first_rotation") >= 3)  # noqa: PLR2004
+    cards = [
+        models.Card(
+            kind="draft",
+            title=f"{r['champion']} is a game-1 priority",
+            detail=f"They take it (pick or ban) in their first rotation in {r['first_rotation_rate']:.0%} of game "
+            "1s. Ban it, or have a plan for facing it, when you draft game 1.",
+            evidence=f"{r['first_rotation']}/{r['n']} game 1s",
+            strength="descriptive",
+            champions=[r["champion"]],
+        )
+        for r in g1.sort("first_rotation_rate", descending=True).head(2).iter_rows(named=True)
+    ]
+    strong = draft.filter(
+        pl.col("split") == "all", pl.col("tendency") == "strong", pl.col("rate") > pl.col("base_rate")
+    )
+    top = strong.with_columns(gap=pl.col("rate") - pl.col("base_rate")).sort("gap", descending=True).head(2)
+    cards.extend(
+        models.Card(
+            kind="draft",
+            title=f"They prioritise {r['champion']} far more than their league",
+            detail=f"Picked or banned in {r['rate']:.0%} of their games vs {r['base_rate']:.0%} league-wide "
+            f"({r['picks']} picks, {r['bans']} bans). Not chance (survives the multiple-testing correction).",
+            evidence=f"{r['k']}/{r['n']} games",
+            strength="strong",
+            champions=[r["champion"]],
+        )
+        for r in top.iter_rows(named=True)
+    )
+    return cards
+
+
+def _player_cards(team_id: str) -> list[models.Card]:
+    cards: list[models.Card] = []
+    targets = table("stats_ban_targets").filter(pl.col("team_id") == team_id, pl.col("period") == "all")
+    for r in targets.sort("k", descending=True).head(1).iter_rows(named=True):
+        champs = [c["champion"] for c in r["champions"][:3]]
+        cards.append(
+            models.Card(
+                kind="players",
+                title=f"{r['target_player']} is the player opponents fear",
+                detail=f"{r['rate']:.0%} of the bans they face hit {r['target_player']}'s pool ({', '.join(champs)}). "
+                "Their draft is built around keeping that player on comfort.",
+                evidence=f"{r['k']}/{r['n']} bans faced",
+                strength="descriptive",
+                champions=champs,
+            )
+        )
+    try:
+        pool = players(team_id).players
+    except HTTPException:
+        return cards
+    current = [p for p in pool if p.current and p.n >= 20]  # noqa: PLR2004
+    if current:
+        thin = min(current, key=lambda p: p.effective_pool)
+        top = [c.champion for c in thin.champions[:3]]
+        cards.append(
+            models.Card(
+                kind="players",
+                title=f"{thin.name} has the shallowest pool",
+                detail=f"About {thin.effective_pool:.1f} equally-played champions over {thin.n} pro games; most "
+                f"comfortable: {', '.join(top)}. Targeted bans and Fearless depletion hit hardest here.",
+                evidence=f"n={thin.n} games, 95% {thin.effective_pool_lo:.1f}–{thin.effective_pool_hi:.1f}",
+                strength="descriptive",
+                champions=top,
+            )
+        )
+    return cards
+
+
+def _macro_cards(team_id: str) -> list[models.Card]:
+    rates = table("stats_macro_rates").filter(
+        pl.col("team_id") == team_id, pl.col("period") == "all", pl.col("split") == "all", pl.col("tendency") != "noise"
+    )
+    cards: list[models.Card] = []
+    for r in rates.sort("p").head(3).iter_rows(named=True):
+        what, todo = MACRO_TEXT.get(r["metric"], (r["metric"], ""))
+        cards.append(
+            models.Card(
+                kind="macro",
+                title=f"{what}: {r['rate']:.0%} vs {r['base_rate']:.0%} league",
+                detail=f"{todo.capitalize()}."
+                + (" Positions are event snapshots, not tracking." if r["metric"] == "jungle_top_start" else ""),
+                evidence=f"{r['k']}/{r['n']} games",
+                strength=r["tendency"],
+            )
+        )
+    return cards
+
+
+def _model_cards(team_id: str) -> list[models.Card]:
+    """Their likeliest first bans / first pick, from the draft model (only if the live context is already built)."""
+    from fele.engine import recommend  # noqa: PLC0415 - heavy
+    from fele.engine.draft import DraftState  # noqa: PLC0415
+    from fele.engine.live import get_live, live_ready  # noqa: PLC0415
+
+    if not live_ready():
+        return []
+    live = get_live()
+    us = prefs.load().team
+    try:
+        m = recommend.matchup(live, us, team_id, we_are_blue=True)
+    except KeyError:
+        return []
+    first_ban = recommend.action_probs(m, [DraftState(we_pick_first=True).play("")])[0]
+    first_pick = recommend.action_probs(m, [DraftState(we_pick_first=False, actions=("",) * 6)])[0]
+    cards: list[models.Card] = []
+    for probs, what in ((first_ban, "first ban"), (first_pick, "first pick (when they pick first)")):
+        top = [int(i) for i in probs.argsort()[::-1][:3]]
+        names = [live.vocab[i] for i in top]
+        cards.append(
+            models.Card(
+                kind="model",
+                title=f"Their likeliest {what} vs {us}",
+                detail=", ".join(f"{live.vocab[i]} {probs[i]:.0%}" for i in top) + ". Draft-model estimate; the actual "
+                "pick or ban was in its top 10 64% of the time on the holdout.",
+                evidence="model (LambdaRank)",
+                strength="model",
+                champions=names,
+            )
+        )
+    return cards
+
+
+@app.get("/teams/{team_id}/cards", tags=["scouting"], summary='"How to win" cards with their evidence')
+def cards(team_id: str) -> list[models.Card]:
+    """Short, evidence-backed insights from the statistics (all games) and the draft model."""
+    _team(team_id)
+    return [*_draft_cards(team_id), *_player_cards(team_id), *_macro_cards(team_id), *_model_cards(team_id)]
+
+
 # --- meta -------------------------------------------------------------------------------------------------------
 @app.get("/meta", tags=["meta"], summary="Champion meta score per patch window")
 def meta(window: Annotated[str, Query(description="`live` or a GRID patch such as 16.17")] = "live") -> models.Meta:
@@ -340,9 +489,17 @@ def draft_recommend(req: models.DraftRequest) -> models.DraftAdvice:
             s = s.play(c)
     except (KeyError, ValueError) as e:
         raise HTTPException(422, str(e)) from e
-    prefs_ = prefs.load()
+    prefs_ = req.preferences or prefs.load()
     team_name = live.team_names.get(m.them, req.them)
     options = recommend.recommend(m, s, prefs_, req.mode, enemy_name=team_name)
+    likely: list[models.Likely] = []
+    if not s.complete and s.who(s.slot) == THEM:
+        probs = recommend.action_probs(m, [s])[0]
+        top = [int(i) for i in probs.argsort()[::-1][: recommend.TOP_N]]
+        likely = [
+            models.Likely(champion=live.vocab[i], key=_key_map().get(live.vocab[i]), probability=float(probs[i]))
+            for i in top
+        ]
     mean, p10, p90 = recommend.rollout_win_prob(m, s)
     keys = _key_map()
     nxt = (
@@ -370,6 +527,7 @@ def draft_recommend(req: models.DraftRequest) -> models.DraftAdvice:
             )
             for o in options
         ],
+        likely=likely,
         win_prob=models.WinProb(mean=mean, p10=p10, p90=p90),
         our_comp=comp_out(comp.analyze(m, s.picks(US), s.picks(THEM))),
         their_comp=comp_out(comp.analyze(m, s.picks(THEM), s.picks(US))),
@@ -383,25 +541,31 @@ def series_simulate(req: models.SeriesRequest) -> models.SeriesPlan:
 
     live = get_live()
     sims = max(20, min(req.sims, MAX_SIMS))
-    prefs_ = prefs.load()
-    try:
-        plan = series.simulate(
+    prefs_ = req.preferences or prefs.load()
+    start = series.SeriesStart(
+        game=req.start_game,
+        wins=req.wins,
+        losses=req.losses,
+        locked=frozenset(req.locked),
+        we_first=req.we_start_blue if req.we_first_next is None else req.we_first_next,
+    )
+
+    def run(save: dict[str, int]) -> series.SeriesResult:
+        return series.simulate(
             live,
             req.us,
             req.them,
             best_of=req.best_of,
-            we_start_blue=req.we_start_blue,
             prefs=prefs_,
-            save=req.save,
+            save=save,
             sims=sims,
+            start=start,
+            key_champions=req.key_champions or None,
         )
-        base = (
-            series.simulate(
-                live, req.us, req.them, best_of=req.best_of, we_start_blue=req.we_start_blue, prefs=prefs_, sims=sims
-            )
-            if req.save
-            else None
-        )
+
+    try:
+        plan = run(req.save)
+        base = run({}) if req.save else None
     except KeyError as e:
         raise HTTPException(422, str(e)) from e
     diff = se = None

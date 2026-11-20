@@ -173,12 +173,15 @@ def build_live() -> Live:
     )
 
 
-def _inputs_key() -> tuple[object, ...]:
+def _stamps() -> list[tuple[str, int]]:
+    """(file name, modification time in ns) of every input of the live context."""
     root = settings().local()
     patterns = ("parquet/*.parquet", "static/*.parquet", "aggregates/soloq_*.parquet")
-    files = sorted(f for pattern in patterns for f in root.glob(pattern))
-    stamps = [(f.name, f.stat().st_mtime_ns) for f in files]
-    return CACHE_VERSION, *stamps
+    return [(f.name, f.stat().st_mtime_ns) for pattern in patterns for f in sorted(root.glob(pattern))]
+
+
+def _inputs_key() -> tuple[object, ...]:
+    return CACHE_VERSION, *_stamps()
 
 
 def _cache_path() -> Path:
@@ -195,6 +198,12 @@ def _load(key: tuple[object, ...]) -> Live:
     live = build_live()
     path.write_bytes(pickle.dumps((key, live)))
     return live
+
+
+def live_ready() -> bool:
+    """True when the cached live context matches the current data (no ~30 s rebuild needed)."""
+    path = _cache_path()
+    return path.exists() and path.stat().st_mtime_ns > max((t for _, t in _stamps()), default=0)
 
 
 def get_live() -> Live:

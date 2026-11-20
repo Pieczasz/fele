@@ -4,9 +4,12 @@ import { Link, Navigate, NavLink, Route, Routes } from 'react-router'
 import { api, LoginRequiredError } from './api/client.ts'
 import { Footer } from './components/Footer.tsx'
 import { Login } from './components/Login.tsx'
+import { CoachPage } from './pages/CoachPage.tsx'
 import { CoveragePage } from './pages/CoveragePage.tsx'
+import { DraftPage } from './pages/DraftPage.tsx'
 import { MacroPage } from './pages/MacroPage.tsx'
 import { MetaPage } from './pages/MetaPage.tsx'
+import { PlannerPage } from './pages/PlannerPage.tsx'
 import { PlayersPage } from './pages/PlayersPage.tsx'
 import { ScoutingPage } from './pages/ScoutingPage.tsx'
 import { TeamLayout } from './pages/TeamLayout.tsx'
@@ -15,7 +18,10 @@ import { applyTheme, initialTheme, type Theme } from './theme.ts'
 
 const NAV = [
   ['/', 'Teams'],
+  ['/planner', 'Series plan'],
+  ['/draft', 'Mock draft'],
   ['/meta', 'Meta'],
+  ['/coach', 'Coach'],
   ['/coverage', 'Data'],
 ] as const
 
@@ -82,6 +88,9 @@ export function App() {
               <Route path="players" element={<PlayersPage />} />
               <Route path="macro" element={<MacroPage />} />
             </Route>
+            <Route path="/planner" element={<PlannerPage />} />
+            <Route path="/draft" element={<DraftPage />} />
+            <Route path="/coach" element={<CoachPage />} />
             <Route path="/meta" element={<MetaPage />} />
             <Route path="/coverage" element={<CoveragePage />} />
             <Route path="*" element={<p className="text-muted">Page not found.</p>} />

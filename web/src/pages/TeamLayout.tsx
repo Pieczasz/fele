@@ -1,9 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
-import { NavLink, Outlet } from 'react-router'
+import { NavLink, Outlet, useNavigate } from 'react-router'
 import { api } from '../api/client.ts'
 import { Segmented } from '../components/Segmented.tsx'
 import { shortDate } from '../format.ts'
-import { usePeriod, useTeamId } from '../hooks.ts'
+import { EMPTY_PLAN, usePeriod, usePlan, useTeamId } from '../hooks.ts'
 
 const TABS = [
   ['scouting', 'Draft'],
@@ -19,6 +19,8 @@ const PERIODS = [
 export function TeamLayout() {
   const teamId = useTeamId()
   const [period, setPeriod] = usePeriod()
+  const [, setPlan] = usePlan()
+  const navigate = useNavigate()
   const team = useQuery({ queryKey: ['teams'], queryFn: api.teams }).data?.find((t) => t.team_id === teamId)
   return (
     <div className="space-y-5">
@@ -33,7 +35,19 @@ export function TeamLayout() {
             </p>
           ) : null}
         </div>
-        <Segmented label="Period" options={PERIODS} value={period} onChange={setPeriod} />
+        <div className="flex flex-wrap items-center gap-2">
+          <Segmented label="Period" options={PERIODS} value={period} onChange={setPeriod} />
+          <button
+            type="button"
+            onClick={() => {
+              setPlan({ ...EMPTY_PLAN, opponent: teamId })
+              navigate('/planner')
+            }}
+            className="min-h-9 cursor-pointer rounded-md bg-primary px-3 text-sm font-medium text-bg"
+          >
+            Plan a series vs this team
+          </button>
+        </div>
       </header>
       <nav aria-label="Report sections" className="flex gap-1 border-b border-line">
         {TABS.map(([to, label]) => (

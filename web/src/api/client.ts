@@ -16,6 +16,14 @@ export type Rate = Schemas['Rate']
 export type Scouting = Schemas['Scouting']
 export type Team = Schemas['Team']
 export type Period = Scouting['period']
+export type ChampionInfo = Schemas['ChampionInfo']
+export type DraftRequest = Schemas['DraftRequest']
+export type DraftAdvice = Schemas['DraftAdvice']
+export type OptionOut = Schemas['OptionOut']
+export type SeriesRequest = Schemas['SeriesRequest']
+export type SeriesPlan = Schemas['SeriesPlan']
+export type SeriesOut = Schemas['SeriesOut']
+export type Card = Schemas['Card']
 
 /** The hosted demo is password protected and this browser has no session yet. */
 export class LoginRequiredError extends Error {
@@ -38,6 +46,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 const get = <T>(path: string) => request<T>(path)
+const post = <T>(path: string, body: unknown) =>
+  request<T>(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
 
 export const api = {
   health: () => get<Health>('/health'),
@@ -50,6 +60,10 @@ export const api = {
   meta: (window: string) => get<Meta>(`/meta?window=${encodeURIComponent(window)}`),
   coverage: () => get<Coverage>('/coverage'),
   preferences: () => get<Preferences>('/preferences'),
+  champions: () => get<ChampionInfo[]>('/champions'),
+  cards: (teamId: string) => get<Card[]>(`/teams/${encodeURIComponent(teamId)}/cards`),
+  recommend: (body: DraftRequest) => post<DraftAdvice>('/draft/recommend', body),
+  simulate: (body: SeriesRequest) => post<SeriesPlan>('/series/simulate', body),
   login: (password: string) =>
     request<undefined>('/login', {
       method: 'POST',

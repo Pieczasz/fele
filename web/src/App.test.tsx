@@ -82,6 +82,8 @@ const META: Meta = {
 const TEAM_LINK = /Team One/
 const INFO = { ddragon_version: '16.23.1', live_patch: '16.23', demo_protected: false }
 
+const DEFAULTS: Record<string, unknown> = { '/champions': [], '/teams/t1/cards': [] }
+
 function fakeApi(routes: Record<string, unknown>, status = 200) {
   const calls: string[] = []
   vi.stubGlobal(
@@ -92,7 +94,7 @@ function fakeApi(routes: Record<string, unknown>, status = 200) {
       if (status !== 200 && path !== '/info') {
         return Promise.resolve(Response.json({ detail: 'Login required' }, { status }))
       }
-      return Promise.resolve(Response.json(routes[path] ?? {}))
+      return Promise.resolve(Response.json(routes[path] ?? DEFAULTS[path] ?? {}))
     }),
   )
   return calls

@@ -391,6 +391,12 @@ Also:
 
 **Acceptance:** a full flow (choose opponent → read report → plan series → run mock draft) works without dead ends; usability pass by someone who plays LoL but didn't build it.
 
+**Status (2026-11-20):** done in `web/`: mock draft board (`/draft`, keyboard: `/` search, `1`–`5` take option,
+Backspace undo, `S` skip ban), Fearless series planner (`/planner`: games, locks, remaining pools, save list,
+simulate with a "lose the next game" branch, JSON/CSV import/export), "how to win" cards on each scouting page,
+coach inputs (`/coach`, stored in the browser). Full flow checked in Chrome; usability pass by an outside player
+still open.
+
 **🛑 Checkpoint:** human approves the flow that will be shown in the video.
 
 ---

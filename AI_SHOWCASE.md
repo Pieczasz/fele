@@ -221,3 +221,20 @@ One entry per phase of [AGENT_PLAN.md](AGENT_PLAN.md): what was asked, what the 
     reported as-is, and the weights stay fixed: tuning them on holdout drafts would be the overfitting the user
     asked to avoid.
 - **Human corrections:** _(fill in at checkpoint: mock Bo5 vs a real opponent)_
+
+### Phase 10 — Product integration (2026-11-20)
+
+- **Asked:** "continue": the mock draft board, the Fearless series planner, "how to win" cards and coach inputs.
+- **Agent produced:**
+  - `/draft`: pro draft order, champion grid with search, role filter and Fearless locks (labelled with the game),
+    win-probability bar with its range, ranked options with reasons, keyboard shortcuts, and "save to series";
+  - `/planner`: game tabs, locks, remaining pools for both teams, a save list, simulation with a "lose the next game"
+    branch and a "within noise" flag, plus JSON/CSV import and export;
+  - "how to win" cards on each scouting page, each with evidence n and a strength label;
+  - `/coach`: pools, comfort, style and must-bans, stored in the browser.
+- **Caught along the way:**
+  - Driving the flow in Chrome showed the planner's availability table labelled a simulation from game 2 as "G1". The
+    API now returns `first_game`.
+  - Ban slots truncated champion names to "N..". They now show the icon only, with the name for screen readers and
+    as a tooltip.
+- **Human corrections:** _(fill in at checkpoint: approve the video flow)_

@@ -25,6 +25,7 @@ COMFORT_POOL = {Comfort.signature, Comfort.comfortable}
 @dataclass
 class SeriesResult:
     best_of: int
+    first_game: int  # availability/depletion lists start at this game number
     sims: int
     series_win: float
     series_win_se: float
@@ -34,6 +35,17 @@ class SeriesResult:
     notes: list[str] = field(default_factory=list[str])
     drafts: list[list[tuple[list[str], list[str]]]] = field(default_factory=list[list[tuple[list[str], list[str]]]])
     # per simulated series: (our picks, their picks) of each game — only with record=True (for tests)
+
+
+@dataclass(frozen=True)
+class SeriesStart:
+    """Where the series stands (scenario branches such as "if we lose G1")."""
+
+    game: int = 1  # next game number
+    wins: int = 0
+    losses: int = 0
+    locked: frozenset[str] = frozenset()  # champions already picked in this series (hard Fearless)
+    we_first: bool = True  # we have first pick / blue side in the next game
 
 
 @dataclass
@@ -86,18 +98,23 @@ def simulate(  # noqa: PLR0913 - one series setup
     sims: int = SIMS,
     seed: int = 0,
     record: bool = False,
+    start: SeriesStart | None = None,
 ) -> SeriesResult:
     """save: champion -> first game number we may pick it in (e.g. {"Azir": 3} = keep Azir for game 3+)."""
     rng = np.random.default_rng(seed)
     need = best_of // 2 + 1
-    runs = [_Sim(we_first=we_start_blue) for _ in range(sims)]
+    start = start or SeriesStart(we_first=we_start_blue)
+    runs = [
+        _Sim(locked=set(start.locked), wins=start.wins, losses=start.losses, we_first=start.we_first)
+        for _ in range(sims)
+    ]
     pools = {
         p.name: [n.champion for n in p.pool if n.comfort in COMFORT_POOL] for p in (prefs.players if prefs else [])
     }
     keys = key_champions or sorted({c for cs in pools.values() for c in cs})
     avail: dict[str, list[float]] = {c: [] for c in keys}
     depletion: dict[str, list[float]] = {name: [] for name in pools}
-    for game in range(1, best_of + 1):
+    for game in range(start.game, best_of + 1):
         alive = [r for r in runs if not r.done(need)]
         if not alive:
             break
@@ -125,6 +142,7 @@ def simulate(  # noqa: PLR0913 - one series setup
     outcome = np.array([r.wins >= need for r in runs], float)
     return SeriesResult(
         best_of=best_of,
+        first_game=start.game,
         sims=sims,
         series_win=float(outcome.mean()),
         series_win_se=float(outcome.std(ddof=1) / np.sqrt(sims)),

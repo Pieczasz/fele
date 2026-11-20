@@ -16,7 +16,8 @@ Fearless series planner for League of Legends, built for Cloud9's LoL staff in t
 | Meta & patch view | What's strong in pro play and in current-patch high-elo solo queue? |
 | ML draft engine | Win probability for a draft, opponent pick/ban prediction, ranked recommendations with reasons |
 | Fearless series planner | Monte Carlo over a Bo3/Bo5: pool depletion, what to save for late games |
-| Mock draft board | Real pro draft order, live win probability with uncertainty |
+| Mock draft board | Real pro draft order, live win probability with uncertainty, keyboard shortcuts |
+| "How to win" cards | Short insights per opponent, each with its evidence count |
 | Coach preferences | Player comfort tiers, "refuses" picks, prio players, save lists — human knowledge the data can't see |
 
 Every number carries its sample size. Recommendations are ranked options with reasons, never orders.

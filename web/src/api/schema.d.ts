@@ -149,6 +149,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/teams/{team_id}/cards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * "How to win" cards with their evidence
+         * @description Short, evidence-backed insights from the statistics (all games) and the draft model.
+         */
+        get: operations["cards_teams__team_id__cards_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/meta": {
         parameters: {
             query?: never;
@@ -186,6 +206,61 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/champions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Champions for the draft board */
+        get: operations["champions_champions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/draft/recommend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ranked options for our next pick/ban, with reasons
+         * @description Options, never orders: each comes with its evidence. The live win probability completes the draft many times
+         *     with the draft-action model and averages the outcome model (Elo-dominated; see docs/MODEL_CARD.md).
+         */
+        post: operations["draft_recommend_draft_recommend_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/series/simulate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Monte Carlo of a Fearless Bo3/Bo5, optionally with a save plan */
+        post: operations["series_simulate_series_simulate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/preferences": {
         parameters: {
             query?: never;
@@ -215,6 +290,33 @@ export interface components {
             /** Password */
             password: string;
         };
+        /**
+         * Card
+         * @description A "how to win" insight: one claim, its evidence, and what to do with it.
+         */
+        Card: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "draft" | "macro" | "players" | "model";
+            /** Title */
+            title: string;
+            /** Detail */
+            detail: string;
+            /** Evidence */
+            evidence: string;
+            /**
+             * Strength
+             * @enum {string}
+             */
+            strength: "strong" | "weak" | "model" | "descriptive";
+            /**
+             * Champions
+             * @default []
+             */
+            champions: string[];
+        };
         /** ChampionCount */
         ChampionCount: {
             /** Champion */
@@ -223,6 +325,15 @@ export interface components {
             key: string | null;
             /** Count */
             count: number;
+        };
+        /** ChampionInfo */
+        ChampionInfo: {
+            /** Name */
+            name: string;
+            /** Key */
+            key: string | null;
+            /** Roles */
+            roles: string[];
         };
         /** ChampionNote */
         ChampionNote: {
@@ -241,6 +352,27 @@ export interface components {
          * @enum {string}
          */
         Comfort: "signature" | "comfortable" | "playable" | "learning" | "refuses";
+        /** CompOut */
+        CompOut: {
+            /** Champions */
+            champions: string[];
+            /** Ap Share */
+            ap_share: number;
+            /** Damage */
+            damage: string;
+            /** Totals */
+            totals: {
+                [key: string]: number;
+            };
+            /** Scaling */
+            scaling: string;
+            /** Warnings */
+            warnings: string[];
+            /** Contribution */
+            contribution: {
+                [key: string]: number;
+            };
+        };
         /** Coverage */
         Coverage: {
             /** Leagues */
@@ -249,6 +381,61 @@ export interface components {
             soloq: components["schemas"]["SoloqCoverage"][];
             /** Teams */
             teams: components["schemas"]["Team"][];
+        };
+        /** DraftAdvice */
+        DraftAdvice: {
+            next: components["schemas"]["NextAction"] | null;
+            /** Options */
+            options: components["schemas"]["OptionOut"][];
+            /** Likely */
+            likely: components["schemas"]["Likely"][];
+            win_prob: components["schemas"]["WinProb"];
+            our_comp: components["schemas"]["CompOut"];
+            their_comp: components["schemas"]["CompOut"];
+        };
+        /** DraftRequest */
+        DraftRequest: {
+            /** Us */
+            us: string;
+            /** Them */
+            them: string;
+            /**
+             * We Are Blue
+             * @default true
+             */
+            we_are_blue: boolean;
+            /**
+             * We Pick First
+             * @default true
+             */
+            we_pick_first: boolean;
+            /**
+             * Actions
+             * @default []
+             */
+            actions: string[];
+            /**
+             * Locked
+             * @default []
+             */
+            locked: string[];
+            /**
+             * Game Number
+             * @default 1
+             */
+            game_number: number;
+            /**
+             * Series Score
+             * @default 0
+             */
+            series_score: number;
+            /**
+             * Mode
+             * @default best
+             * @enum {string}
+             */
+            mode: "best" | "comfort_only" | "save";
+            preferences?: components["schemas"]["Preferences"] | null;
         };
         /** DraftRow */
         DraftRow: {
@@ -349,6 +536,15 @@ export interface components {
              * Format: date-time
              */
             last_game: string;
+        };
+        /** Likely */
+        Likely: {
+            /** Champion */
+            champion: string;
+            /** Key */
+            key: string | null;
+            /** Probability */
+            probability: number;
         };
         /** Macro */
         Macro: {
@@ -454,6 +650,42 @@ export interface components {
             delta: number | null;
             /** Meta Score */
             meta_score: number;
+        };
+        /** NextAction */
+        NextAction: {
+            /** Slot */
+            slot: number;
+            /**
+             * Who
+             * @enum {string}
+             */
+            who: "us" | "them";
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "pick" | "ban";
+            /** Phase */
+            phase: string;
+        };
+        /** OptionOut */
+        OptionOut: {
+            /** Champion */
+            champion: string;
+            /** Key */
+            key: string | null;
+            /** Role */
+            role: string | null;
+            /** Score */
+            score: number;
+            /** Parts */
+            parts: {
+                [key: string]: number;
+            };
+            /** Reasons */
+            reasons: string[];
+            /** Win Prob */
+            win_prob: number | null;
         };
         /** Player */
         Player: {
@@ -605,6 +837,100 @@ export interface components {
             /** Targeted Players */
             targeted_players: components["schemas"]["TargetedPlayer"][];
         };
+        /** SeriesOut */
+        SeriesOut: {
+            /** Best Of */
+            best_of: number;
+            /** First Game */
+            first_game: number;
+            /** Sims */
+            sims: number;
+            /** Series Win */
+            series_win: number;
+            /** Series Win Se */
+            series_win_se: number;
+            /** Expected Games */
+            expected_games: number;
+            /** Availability */
+            availability: {
+                [key: string]: number[];
+            };
+            /** Depletion */
+            depletion: {
+                [key: string]: number[];
+            };
+            /** Notes */
+            notes: string[];
+        };
+        /** SeriesPlan */
+        SeriesPlan: {
+            plan: components["schemas"]["SeriesOut"];
+            no_plan: components["schemas"]["SeriesOut"] | null;
+            /** Difference */
+            difference: number | null;
+            /** Difference Se */
+            difference_se: number | null;
+            /** Within Noise */
+            within_noise: boolean | null;
+        };
+        /** SeriesRequest */
+        SeriesRequest: {
+            /** Us */
+            us: string;
+            /** Them */
+            them: string;
+            /**
+             * Best Of
+             * @default 3
+             * @enum {integer}
+             */
+            best_of: 1 | 3 | 5;
+            /**
+             * We Start Blue
+             * @default true
+             */
+            we_start_blue: boolean;
+            /**
+             * Save
+             * @default {}
+             */
+            save: {
+                [key: string]: number;
+            };
+            /**
+             * Sims
+             * @default 200
+             */
+            sims: number;
+            /**
+             * Start Game
+             * @default 1
+             */
+            start_game: number;
+            /**
+             * Wins
+             * @default 0
+             */
+            wins: number;
+            /**
+             * Losses
+             * @default 0
+             */
+            losses: number;
+            /**
+             * Locked
+             * @default []
+             */
+            locked: string[];
+            /** We First Next */
+            we_first_next?: boolean | null;
+            /**
+             * Key Champions
+             * @default []
+             */
+            key_champions: string[];
+            preferences?: components["schemas"]["Preferences"] | null;
+        };
         /** SeriesStrategy */
         SeriesStrategy: {
             /**
@@ -693,6 +1019,20 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /** WinProb */
+        WinProb: {
+            /** Mean */
+            mean: number;
+            /** P10 */
+            p10: number;
+            /** P90 */
+            p90: number;
+            /**
+             * Note
+             * @default Outcome model is Elo-dominated: drafts move it a few points at most (docs/MODEL_CARD.md).
+             */
+            note: string;
         };
     };
     responses: never;
@@ -909,6 +1249,37 @@ export interface operations {
             };
         };
     };
+    cards_teams__team_id__cards_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Card"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     meta_meta_get: {
         parameters: {
             query?: {
@@ -957,6 +1328,92 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Coverage"];
+                };
+            };
+        };
+    };
+    champions_champions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChampionInfo"][];
+                };
+            };
+        };
+    };
+    draft_recommend_draft_recommend_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DraftRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftAdvice"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    series_simulate_series_simulate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SeriesRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SeriesPlan"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

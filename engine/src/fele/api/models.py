@@ -5,6 +5,8 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from fele.prefs import Preferences
+
 Period = Literal["recent", "all"]
 Tendency = Literal["strong", "weak", "noise"]
 
@@ -199,6 +201,7 @@ class DraftRequest(BaseModel):
     game_number: int = 1
     series_score: int = 0  # our wins - their wins so far
     mode: Literal["best", "comfort_only", "save"] = "best"
+    preferences: Preferences | None = None  # the coach's own edits (kept in their browser); default: server file
 
 
 class NextAction(BaseModel):
@@ -235,9 +238,16 @@ class CompOut(BaseModel):
     contribution: dict[str, float]
 
 
+class Likely(BaseModel):
+    champion: str
+    key: str | None
+    probability: float
+
+
 class DraftAdvice(BaseModel):
     next: NextAction | None
-    options: list[OptionOut]
+    options: list[OptionOut]  # our turn: ranked options with reasons
+    likely: list[Likely]  # their turn: what they most likely pick/ban (draft model)
     win_prob: WinProb
     our_comp: CompOut
     their_comp: CompOut
@@ -250,10 +260,18 @@ class SeriesRequest(BaseModel):
     we_start_blue: bool = True
     save: dict[str, int] = {}  # champion -> first game we may pick it (Fearless plan)
     sims: int = 200
+    start_game: int = 1  # scenario branches: where the series stands
+    wins: int = 0
+    losses: int = 0
+    locked: list[str] = []
+    we_first_next: bool | None = None  # first pick / blue in the next game (default: we_start_blue)
+    key_champions: list[str] = []  # champions to track availability for (default: our comfortable pools)
+    preferences: Preferences | None = None
 
 
 class SeriesOut(BaseModel):
     best_of: int
+    first_game: int
     sims: int
     series_win: float
     series_win_se: float
@@ -269,3 +287,14 @@ class SeriesPlan(BaseModel):
     difference: float | None  # plan - no plan, series win probability
     difference_se: float | None
     within_noise: bool | None  # |difference| < 2 standard errors: don't read anything into it
+
+
+class Card(BaseModel):
+    """A "how to win" insight: one claim, its evidence, and what to do with it."""
+
+    kind: Literal["draft", "macro", "players", "model"]
+    title: str
+    detail: str
+    evidence: str  # e.g. "6/10 game 1s", "n=113, league 66%"
+    strength: Literal["strong", "weak", "model", "descriptive"]
+    champions: list[str] = []  # GRID names, for icons

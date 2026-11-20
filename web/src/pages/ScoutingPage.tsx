@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { api, type DraftRow, type Scouting } from '../api/client.ts'
+import { Cards } from '../components/Cards.tsx'
 import { Champion, ChampionIcon } from '../components/ChampionIcon.tsx'
 import { NBadge, RateBar, TendencyBadge } from '../components/Evidence.tsx'
 import { QueryState, Section } from '../components/QueryState.tsx'
@@ -130,5 +131,10 @@ export function ScoutingPage() {
   const teamId = useTeamId()
   const [period] = usePeriod()
   const query = useQuery({ queryKey: ['scouting', teamId, period], queryFn: () => api.scouting(teamId, period) })
-  return <QueryState query={query}>{(data) => <Report data={data} />}</QueryState>
+  return (
+    <div className="space-y-5">
+      <Cards teamId={teamId} />
+      <QueryState query={query}>{(data) => <Report data={data} />}</QueryState>
+    </div>
+  )
 }
