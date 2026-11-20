@@ -377,7 +377,7 @@ def _model_cards(team_id: str) -> list[models.Card]:
 
 
 @app.get("/teams/{team_id}/cards", tags=["scouting"], summary='"How to win" cards with their evidence')
-def cards(team_id: str) -> list[models.Card]:
+def team_cards(team_id: str) -> list[models.Card]:
     """Short, evidence-backed insights from the statistics (all games) and the draft model."""
     _team(team_id)
     return [*_draft_cards(team_id), *_player_cards(team_id), *_macro_cards(team_id), *_model_cards(team_id)]

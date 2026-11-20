@@ -160,7 +160,7 @@ export interface paths {
          * "How to win" cards with their evidence
          * @description Short, evidence-backed insights from the statistics (all games) and the draft model.
          */
-        get: operations["cards_teams__team_id__cards_get"];
+        get: operations["team_cards_teams__team_id__cards_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1249,7 +1249,7 @@ export interface operations {
             };
         };
     };
-    cards_teams__team_id__cards_get: {
+    team_cards_teams__team_id__cards_get: {
         parameters: {
             query?: never;
             header?: never;
