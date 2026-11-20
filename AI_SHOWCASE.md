@@ -197,3 +197,27 @@ One entry per phase of [AGENT_PLAN.md](AGENT_PLAN.md): what was asked, what the 
     calibrated model scores 0.056 (90% range 0.033–0.084) on 316 games, so it is reported as noise rather than
     hidden or "fixed".
 - **Human corrections:** _(fill in at checkpoint: approve the model choice in docs/MODEL_CARD.md)_
+
+### Phase 9 — Recommendation engine & Fearless simulator (2026-11-20)
+
+- **Asked:** recommendations that "help pick the best champion based on already picked ones, preferences, team comp,
+  team playing style, enemy team, and last matches/games", as long as they have a real basis.
+- **Agent produced:** `fele.engine` with:
+  - a live context: production models refit on all games, cached;
+  - a draft state with the pro order and Fearless locks;
+  - ranked options in under 0.4 s, each part a reason with its evidence count: pro behaviour (LambdaRank), coach
+    comfort, the player's recent games, composition gaps, style fit, shrunk solo-queue lane matchups, and the win
+    probability after the enemy's likeliest answers;
+  - ban threat from the enemy's side, rollout win probability, and a composition analyzer;
+  - a Monte Carlo Fearless Bo3/Bo5 simulator;
+  - API endpoints, a back-test, and property tests.
+- **Caught along the way:**
+  - The Hypothesis property test found a real simulator bug: a game result moved a series into the other side group
+    within the same round, so a "best of 3" could play 4 games and series odds were skewed.
+  - Plan comparisons were easy to over-read (59% vs 69% with 100 sims each). The API now returns the difference
+    with its standard error and a "within noise" flag.
+  - A ban reason could say "if they get it: +0.8% for us", which argues against the ban. Fixed.
+  - The back-test shows the extra parts (comp, style, lane) make the engine match pro picks slightly *less*. That is
+    reported as-is, and the weights stay fixed: tuning them on holdout drafts would be the overfitting the user
+    asked to avoid.
+- **Human corrections:** _(fill in at checkpoint: mock Bo5 vs a real opponent)_

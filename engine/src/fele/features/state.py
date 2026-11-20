@@ -16,7 +16,7 @@ player assignment is visible once the draft ends, which is when the outcome mode
 
 import math
 from bisect import bisect_left
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -205,7 +205,7 @@ class Inputs:
     elo: pl.DataFrame
 
 
-class _Builder:
+class Builder:
     """Accumulates feature rows while walking the games in time order."""
 
     def __init__(self, inp: Inputs) -> None:
@@ -223,7 +223,7 @@ class _Builder:
             for (g, t), grp in parts.group_by("game_id", "team_id")
         }
         self.drafts = {g[0]: grp.drop_nulls("slot").sort("slot") for g, grp in draft.group_by("game_id")}
-        self.series_wins: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+        self.series_wins: dict[str, Counter[str]] = defaultdict(Counter)  # picklable (no lambda factory)
         self.locked: dict[str, set[int]] = defaultdict(set)  # series -> champions picked in earlier games
         self.out_rows: list[dict[str, object]] = []
         self.team_x: list[Floats] = []
@@ -267,22 +267,55 @@ class _Builder:
         }
         return f | {c: float(tags[i]) for i, c in enumerate(TAG_COLS)}
 
-    def candidate_tensor(self, g: dict[str, Any], side: str, champ: tuple[Floats, Floats, Floats]) -> None:
+    def candidate_matrix(
+        self,
+        team: str,
+        own_players: list[str],
+        opp_players: list[str],
+        patch: str | None,
+        now: datetime,
+        champ: tuple[Floats, Floats, Floats],
+    ) -> Floats:
+        """(V, len(CANDIDATE_FEATURES)) features of every champion for `team` drafting against `opp_players`."""
         pick_share, ban_share, wr = champ
-        gid, now = g["game_id"], g["started_at"]
-        team, opp = g[f"{side}_team_id"], g["red_team_id" if side == "blue" else "blue_team_id"]
         own_pool = np.zeros(len(self.vocab), np.float32)
-        for p, _, _ in self.roster.get((gid, team), []):
+        for p in own_players:
             own_pool = np.maximum(own_pool, self.st.player_pool(p, now))
         opp_pool = np.zeros(len(self.vocab), np.float32)
-        for p, _, _ in self.roster.get((gid, opp), []):
+        for p in opp_players:
             opp_pool = np.maximum(opp_pool, self.st.player_pool(p, now))
-        delta = self.delta_by.get(g["patch"] or "", np.zeros(len(self.vocab), np.float32))
+        delta = self.delta_by.get(patch or "", np.zeros(len(self.vocab), np.float32))
         team_pick, team_ban = self.st.team_freq(team, "pick", now), self.st.team_freq(team, "ban", now)
+        return np.stack([pick_share, ban_share, wr, team_pick, team_ban, own_pool, opp_pool, delta], axis=1)
+
+    def candidate_tensor(self, g: dict[str, Any], side: str, champ: tuple[Floats, Floats, Floats]) -> None:
+        gid = g["game_id"]
+        team, opp = g[f"{side}_team_id"], g["red_team_id" if side == "blue" else "blue_team_id"]
+        own = [p for p, _, _ in self.roster.get((gid, team), [])]
+        theirs = [p for p, _, _ in self.roster.get((gid, opp), [])]
         self.gt_index[gid, team] = len(self.team_x)
-        self.team_x.append(
-            np.stack([pick_share, ban_share, wr, team_pick, team_ban, own_pool, opp_pool, delta], axis=1)
-        )
+        self.team_x.append(self.candidate_matrix(team, own, theirs, g["patch"], g["started_at"], champ))
+
+    # --- "now" queries for live drafts (state after every game in the data) ---
+    def live_candidates(
+        self, team: str, own_players: list[str], opp_players: list[str], patch: str | None, now: datetime
+    ) -> Floats:
+        pick_share, ban_share, wr, _ = self.st.champ_stats(patch)
+        return self.candidate_matrix(team, own_players, opp_players, patch, now, (pick_share, ban_share, wr))
+
+    def live_team_features(
+        self, team: str, lineup: list[tuple[str, str]], patch: str | None, now: datetime, elo: float, side: str
+    ) -> dict[str, float]:
+        """Outcome-model team features for a hypothetical lineup [(player_id, champion)] drafted now."""
+        gid = f"live-{side}"
+        self.roster[gid, team] = [(p, c, "") for p, c in lineup]
+        g = {"game_id": gid, f"{side}_team_id": team, "started_at": now, "patch": patch, f"{side}_elo": elo}
+        pick_share, ban_share, wr, _ = self.st.champ_stats(patch)
+        picks = [self.index[c] for _, c in lineup if c in self.index]
+        return self.team_features(g, side, picks, (pick_share, ban_share, wr))
+
+    def pmi(self, patch: str | None) -> Floats:
+        return self.st.pmi(patch)
 
     def draft_actions(self, g: dict[str, Any], pmi: Floats) -> None:
         """Rows for this game's picks/bans: state before the game plus the earlier actions of the same game."""
@@ -396,6 +429,12 @@ class _Builder:
 
 def build(inp: Inputs) -> tuple[pl.DataFrame, ActionData]:
     """Walk the games in time order; each game's features use only strictly earlier games."""
+    out, act, _ = build_with_state(inp)
+    return out, act
+
+
+def build_with_state(inp: Inputs) -> tuple[pl.DataFrame, ActionData, Builder]:
+    """Like build(), and also returns the builder holding the state after the last game (for live drafts)."""
     ctx = (
         inp.games.join(inp.series.select("series_id", "league"), on="series_id", how="left")
         .join(inp.elo.select("game_id", "blue_elo", "red_elo"), on="game_id")
@@ -403,7 +442,8 @@ def build(inp: Inputs) -> tuple[pl.DataFrame, ActionData]:
         .drop_nulls(["started_at", "winner_team_id"])
         .sort("started_at", "game_id")
     )
-    b = _Builder(inp)
+    b = Builder(inp)
     for g in ctx.iter_rows(named=True):
         b.game(g)
-    return b.result()
+    out, act = b.result()
+    return out, act, b

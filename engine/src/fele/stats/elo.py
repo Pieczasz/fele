@@ -14,6 +14,22 @@ def expected(r_a: float, r_b: float) -> float:
     return 1.0 / (1.0 + 10 ** ((r_b - r_a) / 400))
 
 
+def current_ratings(ctx: pl.DataFrame) -> dict[str, float]:
+    """Every team's rating after the last game in `ctx` (for live drafts)."""
+    ratings: dict[str, float] = {}
+    for g in (
+        ctx.drop_nulls(["blue_team_id", "red_team_id", "winner_team_id"])
+        .sort("started_at", "game_id")
+        .iter_rows(named=True)
+    ):
+        blue, red = g["blue_team_id"], g["red_team_id"]
+        rb, rr = ratings.get(blue, INITIAL), ratings.get(red, INITIAL)
+        s = 1.0 if g["winner_team_id"] == blue else 0.0
+        e = expected(rb, rr)
+        ratings[blue], ratings[red] = rb + K * (s - e), rr - K * (s - e)
+    return ratings
+
+
 def game_elo(ctx: pl.DataFrame) -> pl.DataFrame:
     """Per game: blue/red pre-game rating, number of earlier rated games for each team (n), expected blue win."""
     ratings: dict[str, float] = {}

@@ -372,6 +372,8 @@ Also:
 
 **Acceptance:** back-test — on held-out real drafts, how often were the team's actual picks within our top 5, and did recommended alternatives have higher predicted win probability (report, don't overclaim); simulator respects Fearless in 100% of simulated series (property-based tests).
 
+**Status (2026-11-20):** engine done (`fele.engine`): live context, ranked options with reasons (< 0.4 s), depth-1 expectimax, rollout win probability, comp analyzer, Fearless series simulator, API (`/draft/recommend`, `/series/simulate`, `/champions`). Back-test and Fearless property tests in place. The mock-draft UI is Phase 10.
+
 **🛑 Checkpoint:** human plays through a mock Bo5 vs a real opponent and notes anything a coach would find wrong.
 
 ---

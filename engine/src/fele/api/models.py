@@ -180,3 +180,92 @@ class Coverage(BaseModel):
     leagues: list[LeagueCoverage]
     soloq: list[SoloqCoverage]
     teams: list[Team]
+
+
+# --- Phase 9: draft engine --------------------------------------------------------------------------------------
+class ChampionInfo(BaseModel):
+    name: str  # GRID name (used in drafts)
+    key: str | None  # Data Dragon key (icons)
+    roles: list[str]
+
+
+class DraftRequest(BaseModel):
+    us: str  # team name or GRID id
+    them: str
+    we_are_blue: bool = True
+    we_pick_first: bool = True
+    actions: list[str] = []  # champions in pro draft order so far ("" = skipped ban)
+    locked: list[str] = []  # Fearless: champions picked in earlier games of this series
+    game_number: int = 1
+    series_score: int = 0  # our wins - their wins so far
+    mode: Literal["best", "comfort_only", "save"] = "best"
+
+
+class NextAction(BaseModel):
+    slot: int
+    who: Literal["us", "them"]
+    kind: Literal["pick", "ban"]
+    phase: str
+
+
+class OptionOut(BaseModel):
+    champion: str
+    key: str | None
+    role: str | None
+    score: float
+    parts: dict[str, float]
+    reasons: list[str]
+    win_prob: float | None
+
+
+class WinProb(BaseModel):
+    mean: float
+    p10: float
+    p90: float
+    note: str = "Outcome model is Elo-dominated: drafts move it a few points at most (docs/MODEL_CARD.md)."
+
+
+class CompOut(BaseModel):
+    champions: list[str]
+    ap_share: float
+    damage: str
+    totals: dict[str, float]
+    scaling: str
+    warnings: list[str]
+    contribution: dict[str, float]
+
+
+class DraftAdvice(BaseModel):
+    next: NextAction | None
+    options: list[OptionOut]
+    win_prob: WinProb
+    our_comp: CompOut
+    their_comp: CompOut
+
+
+class SeriesRequest(BaseModel):
+    us: str
+    them: str
+    best_of: Literal[1, 3, 5] = 3
+    we_start_blue: bool = True
+    save: dict[str, int] = {}  # champion -> first game we may pick it (Fearless plan)
+    sims: int = 200
+
+
+class SeriesOut(BaseModel):
+    best_of: int
+    sims: int
+    series_win: float
+    series_win_se: float
+    expected_games: float
+    availability: dict[str, list[float]]
+    depletion: dict[str, list[float]]
+    notes: list[str]
+
+
+class SeriesPlan(BaseModel):
+    plan: SeriesOut
+    no_plan: SeriesOut | None  # same seed, no save list (only when a plan was given)
+    difference: float | None  # plan - no plan, series win probability
+    difference_se: float | None
+    within_noise: bool | None  # |difference| < 2 standard errors: don't read anything into it

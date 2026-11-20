@@ -37,6 +37,10 @@ app = FastAPI(
         {"name": "system", "description": "Health, login and service metadata."},
         {"name": "scouting", "description": "Opponent reports built from GRID pro games (aggregates only)."},
         {"name": "meta", "description": "Champion strength per patch window, pro play + high-elo solo queue."},
+        {
+            "name": "draft",
+            "description": "Draft recommendations, live win probability and the Fearless series simulator.",
+        },
         {"name": "coach", "description": "Coach and player preferences (comfort picks, prio players, save lists)."},
     ],
 )
@@ -295,6 +299,121 @@ def coverage() -> models.Coverage:
         leagues=[models.LeagueCoverage.model_validate(r) for r in leagues.iter_rows(named=True)],
         soloq=[models.SoloqCoverage.model_validate(r) for r in soloq.iter_rows(named=True)],
         teams=teams(),
+    )
+
+
+# --- draft engine (Phase 9) -------------------------------------------------------------------------------------
+MAX_SIMS = 500
+
+
+def _key_map() -> dict[str, str]:
+    return champion_keys()
+
+
+@app.get("/champions", tags=["draft"], summary="Champions for the draft board")
+def champions() -> list[models.ChampionInfo]:
+    keys = _key_map()
+    roles = dict(table("champions", "static").select("champion", pl.col("roles").str.split("|")).iter_rows())
+    return [models.ChampionInfo(name=n, key=k, roles=roles.get(k, [])) for n, k in sorted(keys.items())]
+
+
+@app.post("/draft/recommend", tags=["draft"], summary="Ranked options for our next pick/ban, with reasons")
+def draft_recommend(req: models.DraftRequest) -> models.DraftAdvice:
+    """Options, never orders: each comes with its evidence. The live win probability completes the draft many times
+    with the draft-action model and averages the outcome model (Elo-dominated; see docs/MODEL_CARD.md)."""
+    from fele.engine import comp, recommend  # noqa: PLC0415 - heavy; only for draft requests
+    from fele.engine.draft import THEM, US, DraftState  # noqa: PLC0415
+    from fele.engine.live import get_live  # noqa: PLC0415
+
+    live = get_live()
+    try:
+        m = recommend.matchup(
+            live,
+            req.us,
+            req.them,
+            we_are_blue=req.we_are_blue,
+            game_number=req.game_number,
+            series_score=req.series_score,
+        )
+        s = DraftState(req.we_pick_first, locked=frozenset(req.locked))
+        for c in req.actions:
+            s = s.play(c)
+    except (KeyError, ValueError) as e:
+        raise HTTPException(422, str(e)) from e
+    prefs_ = prefs.load()
+    team_name = live.team_names.get(m.them, req.them)
+    options = recommend.recommend(m, s, prefs_, req.mode, enemy_name=team_name)
+    mean, p10, p90 = recommend.rollout_win_prob(m, s)
+    keys = _key_map()
+    nxt = (
+        None
+        if s.complete
+        else models.NextAction.model_validate(
+            {"slot": s.slot, "who": s.who(s.slot), "kind": s.kind(s.slot), "phase": s.phase(s.slot)}
+        )
+    )
+
+    def comp_out(result: comp.Comp) -> models.CompOut:
+        return models.CompOut.model_validate(result, from_attributes=True)
+
+    return models.DraftAdvice(
+        next=nxt,
+        options=[
+            models.OptionOut(
+                champion=o.champion,
+                key=keys.get(o.champion),
+                role=o.role,
+                score=o.score,
+                parts=o.parts,
+                reasons=o.reasons,
+                win_prob=o.win_prob,
+            )
+            for o in options
+        ],
+        win_prob=models.WinProb(mean=mean, p10=p10, p90=p90),
+        our_comp=comp_out(comp.analyze(m, s.picks(US), s.picks(THEM))),
+        their_comp=comp_out(comp.analyze(m, s.picks(THEM), s.picks(US))),
+    )
+
+
+@app.post("/series/simulate", tags=["draft"], summary="Monte Carlo of a Fearless Bo3/Bo5, optionally with a save plan")
+def series_simulate(req: models.SeriesRequest) -> models.SeriesPlan:
+    from fele.engine import series  # noqa: PLC0415 - heavy
+    from fele.engine.live import get_live  # noqa: PLC0415
+
+    live = get_live()
+    sims = max(20, min(req.sims, MAX_SIMS))
+    prefs_ = prefs.load()
+    try:
+        plan = series.simulate(
+            live,
+            req.us,
+            req.them,
+            best_of=req.best_of,
+            we_start_blue=req.we_start_blue,
+            prefs=prefs_,
+            save=req.save,
+            sims=sims,
+        )
+        base = (
+            series.simulate(
+                live, req.us, req.them, best_of=req.best_of, we_start_blue=req.we_start_blue, prefs=prefs_, sims=sims
+            )
+            if req.save
+            else None
+        )
+    except KeyError as e:
+        raise HTTPException(422, str(e)) from e
+    diff = se = None
+    if base is not None:
+        diff = plan.series_win - base.series_win
+        se = float((plan.series_win_se**2 + base.series_win_se**2) ** 0.5)
+    return models.SeriesPlan(
+        plan=models.SeriesOut.model_validate(plan, from_attributes=True),
+        no_plan=models.SeriesOut.model_validate(base, from_attributes=True) if base else None,
+        difference=diff,
+        difference_se=se,
+        within_noise=None if diff is None or se is None else abs(diff) < 2 * se,
     )
 
 

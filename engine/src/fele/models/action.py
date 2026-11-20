@@ -146,9 +146,13 @@ class ConditionalLogit:
     def scores(self, rows: pl.DataFrame) -> Floats:
         if self.act is None:
             raise RuntimeError("fit() first")
-        x = features(rows, self.act)
+        return self.scores_for(rows, self.act)
+
+    def scores_for(self, rows: pl.DataFrame, act: ActionData) -> Floats:
+        """Probabilities for actions described by any ActionData (e.g. a live draft), with the fitted weights."""
+        x = features(rows, act)
         return _softmax_logits(
-            (x @ self.w.astype(np.float32)).astype(np.float64), self.act.unavailable[rows["idx"].to_numpy()]
+            (x @ self.w.astype(np.float32)).astype(np.float64), act.unavailable[rows["idx"].to_numpy()]
         )
 
 
@@ -211,8 +215,12 @@ class LambdaRank:
     def scores(self, rows: pl.DataFrame) -> Floats:
         if self.act is None:
             raise RuntimeError("fit() first")
-        s = self._scores(self.model, rows, self.act)
-        return _softmax_logits(s / self.temperature, self.act.unavailable[rows["idx"].to_numpy()])
+        return self.scores_for(rows, self.act)
+
+    def scores_for(self, rows: pl.DataFrame, act: ActionData) -> Floats:
+        """Probabilities for actions described by any ActionData (e.g. a live draft or a simulated one)."""
+        s = self._scores(self.model, rows, act)
+        return _softmax_logits(s / self.temperature, act.unavailable[rows["idx"].to_numpy()])
 
 
 ACTION_LADDER: dict[str, Callable[[], ConditionalLogit | LambdaRank]] = {

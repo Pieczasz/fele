@@ -317,6 +317,25 @@ def explain() -> None:
 
 
 @app.command()
+def backtest() -> None:
+    """Recommender back-test on the holdout drafts -> docs/experiments/<date>-backtest.md."""
+    from fele.eval import backtest as bt
+    from fele.eval import run
+
+    path = run.write_report("backtest", bt.report(bt.backtest()))
+    typer.echo(f"report -> {path}")
+
+
+@app.command()
+def live() -> None:
+    """Build (or refresh) the cached live draft context: production models refit on all games (~30 s)."""
+    from fele.engine.live import get_live
+
+    lv = get_live()
+    typer.echo(f"live context ready: {len(lv.vocab)} champions, {len(lv.lineups)} teams, patch {lv.patch}")
+
+
+@app.command()
 def db() -> None:
     """Build data_local/fele.duckdb: views over GRID meta, Leaguepedia, solo-queue data (open it in PyCharm)."""
     from fele.db import build_catalog, db_path

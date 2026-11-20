@@ -49,23 +49,28 @@ class Results:
     learning: list[dict[str, float]] = field(default_factory=list[dict[str, float]])
 
 
-def load() -> Data:
+def inputs() -> state.Inputs:
+    """Every table the feature store needs, from data_local (ingest + static)."""
     games, series = read("games"), read("series")
-    ctx = game_context(games, series)
     static = settings().local("static")
-    outcome, act = state.build(
-        state.Inputs(
-            games=games,
-            series=series,
-            draft=read("draft_actions"),
-            parts=read("participants"),
-            fearless=read("fearless_state"),
-            champions=pl.read_parquet(static / "champions.parquet"),
-            cmap=pl.read_parquet(static / "champion_map.parquet"),
-            deltas=pl.read_parquet(static / "patch_deltas.parquet"),
-            elo=elo.game_elo(ctx),
-        )
+    return state.Inputs(
+        games=games,
+        series=series,
+        draft=read("draft_actions"),
+        parts=read("participants"),
+        fearless=read("fearless_state"),
+        champions=pl.read_parquet(static / "champions.parquet"),
+        cmap=pl.read_parquet(static / "champion_map.parquet"),
+        deltas=pl.read_parquet(static / "patch_deltas.parquet"),
+        elo=elo.game_elo(game_context(games, series)),
     )
+
+
+def load() -> Data:
+    inp = inputs()
+    games, series = inp.games, inp.series
+    ctx = game_context(games, series)
+    outcome, act = state.build(inp)
     outcome = outcome.join(ctx.select("game_id", "game_bucket"), on="game_id").with_columns(
         elo_diff=pl.col("d_elo"), patch_age=state.patch_age()
     )

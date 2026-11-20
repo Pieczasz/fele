@@ -143,3 +143,39 @@ heuristic for the meta view. The Phase 8 models learn their own weights from the
 - **Result:** draft actions are very predictable (top-10 69% walk-forward, 64% holdout vs 51% / 41% for the
   baseline); game outcomes beyond Elo are not — every outcome rung was within ±0.005 log loss of Elo or significantly
   worse, so Elo stays (promotion rule §5.5). The holdout (opened once) agrees.
+
+## Recommendation engine & series simulator (Phase 9, `engine/src/fele/engine/`)
+
+**Live context** (`fele live`, cached in `data_local/models/live.pkl`): the feature-store state after the last game,
+LambdaRank and the draft-aware logistic outcome model refit on **all** games (evaluation is over), current Elo,
+current lineups, the team's pick-style profile and solo-queue lane matchups.
+
+**Draft state**: the validated pro order (bans ABABAB, picks ABBAAB, bans BABA, picks BAAB; A = first-pick team, which
+may be red since 2026) with hard Fearless locks.
+
+**Options for our next action** (`POST /draft/recommend`, < 0.4 s). Score = sum of evidence-backed parts with
+**fixed** weights (a design choice, not tuned on results); every part becomes a reason with its evidence:
+
+| Part | Basis |
+|---|---|
+| what pro teams pick/ban in this exact spot | LambdaRank (64% top-10 on the holdout) |
+| coach comfort tier × `preferences.weight`; save-for-later and never-pick lists | `config/preferences.yaml` |
+| the player's recent pro games and shrunk win rate on the champion | GRID, recency-weighted |
+| composition gaps filled (damage balance, frontline, engage, peel) | reviewed champion tags |
+| coach style tags and the team's own pick profile | tags + the team's pick history |
+| lane matchup vs the enemy laner (shrunk, shown only with ≥ 10 games) | high-elo solo queue |
+| win-probability change after the enemy's 3 likeliest answers (depth-1 expectimax) | outcome model — weak evidence |
+| bans: their likely next pick × their players' comfort, coach must-bans | LambdaRank from the enemy's side |
+
+**Live win probability**: 24 completions of the draft sampled from LambdaRank (both teams), averaged with the outcome
+model, shown with a 10–90% range. **Series simulator** (`POST /series/simulate`): Monte Carlo of Bo3/Bo5 with hard
+Fearless, our side skipping champions the coach rules out, the loser taking first pick next game (assumption);
+outputs series win probability ± Monte Carlo error, champion availability per game, each player's remaining
+comfortable pool, and plan comparisons flagged "within noise" when |difference| < 2 SE.
+
+**Back-test** (`fele backtest`, models trained on development series only, holdout drafts, state as of each game):
+the actual pick is LambdaRank's top option 16.8% / in its top 5 48.8%; the recommender's re-ranking (adding
+composition, style and lane) matches pros slightly *less* (15.1% / 47.8%) — expected, since those parts deliberately
+pull away from "what pros do here". Whether that wins more can't be measured: draft effects on win probability are
+below what this data can detect (Phase 8). The Fearless property test found and fixed a simulator bug (a series could
+play twice in one round).
