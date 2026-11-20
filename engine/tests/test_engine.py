@@ -5,8 +5,9 @@ from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
 from fele.engine.draft import THEM, US, DraftState
-from fele.engine.recommend import comp_fit, style_fit
-from fele.prefs import Preferences, SeriesStrategy
+from fele.engine.recommend import coach_for_opponent, comp_fit, saved_for_later, style_fit
+from fele.engine.series import _blocked  # pyright: ignore[reportPrivateUsage]
+from fele.prefs import ChampionNote, Comfort, PlayerPrefs, Preferences, Role, SeriesStrategy
 
 
 def test_draft_order_follows_the_pro_template():
@@ -100,3 +101,31 @@ def test_simulated_series_always_respect_fearless(seed: int, best_of: int, blue:
             assert not set(picked) & seen  # hard Fearless across the series
             seen |= set(picked)
         assert len(games) <= best_of
+
+
+def test_coach_entries_match_the_opponent_by_name_prefix_or_id():
+    table = {"Team Liquid": ["Kalista"], "fq": ["Azir"], " ": ["Nobody"]}
+    assert coach_for_opponent(table, "Team Liquid Alienware", "tl-id") == {"Kalista"}
+    assert coach_for_opponent(table, "FlyQuest", "fq") == {"Azir"}
+    assert coach_for_opponent(table, "", "") == set()
+
+
+def test_save_list_applies_only_before_the_game_it_is_kept_for():
+    prefs = Preferences(team="C9", players=[], strategy=SeriesStrategy(save_for_late_games=["Ezreal"]))
+    assert saved_for_later(prefs, {"Azir": 4}, game=1) == {"Ezreal", "Azir"}
+    assert saved_for_later(prefs, {"Azir": 4}, game=3) == {"Azir"}  # game 3+: the coach's list is free to use
+    assert saved_for_later(prefs, {"Azir": 4}, game=4) == set()
+
+
+def test_one_players_refusal_does_not_block_a_teammates_champion():
+    prefs = Preferences(
+        team="C9",
+        players=[
+            PlayerPrefs(name="Top", role=Role.top, pool=[ChampionNote(champion="Gragas", comfort=Comfort.refuses)]),
+            PlayerPrefs(
+                name="Jgl", role=Role.jungle, pool=[ChampionNote(champion="Gragas", comfort=Comfort.comfortable)]
+            ),
+            PlayerPrefs(name="Mid", role=Role.mid, pool=[ChampionNote(champion="Zoe", comfort=Comfort.refuses)]),
+        ],
+    )
+    assert _blocked(prefs, {}, game=3) == {"Zoe"}

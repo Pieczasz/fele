@@ -44,7 +44,7 @@ For each team rate (draft presence, macro metrics) a two-sided **binomial test**
 
 ## Draft priority (`stats/draft.py`)
 
-Per team × champion, for all games and for the last 120 days, overall and split by side and by game number in the
+Per team × champion, for all games and for the team's own last 120 days (each league's data ends on a different date, so a dataset-wide window would empty whole leagues), overall and split by side and by game number in the
 series (G1 / G2 / G3+, the Fearless dimension):
 - **presence** = team-games where the team picked or banned the champion, out of the team's games;
 - **first rotation** = the same, counting only ban phase 1 and pick phase 1 (template slots 1–12);
@@ -58,7 +58,7 @@ faced that targeted a player, `n` = all bans faced.
 ## Player pools (`stats/pools.py`)
 
 From pro games before `as_of`:
-- `recent_games = Σ 0.5^(age_days / 90)`: a game today counts 1, one 90 days ago counts 0.5;
+- `recent_games = Σ 0.5^(age_days / 90)`, age counted from the player's own latest game: that game counts 1, one 90 days earlier counts 0.5;
 - `comfort = recent_games × shrunk_win_rate / 0.5`;
 - **effective pool size** = exp(entropy) of the player's champion distribution ("how many equally played champions
   is this pool worth"), with a basic-bootstrap 95% interval (games resampled 400×), widened to contain the estimate;
@@ -158,7 +158,7 @@ may be red since 2026) with hard Fearless locks.
 
 | Part | Basis |
 |---|---|
-| what pro teams pick/ban in this exact spot | LambdaRank (64% top-10 on the holdout) |
+| what pro teams pick/ban in this exact spot | LambdaRank (71% top-10 walk-forward; 64% on the holdout before the role fix) |
 | coach comfort tier × `preferences.weight`; save-for-later and never-pick lists | `config/preferences.yaml` |
 | the player's recent pro games and shrunk win rate on the champion | GRID, recency-weighted |
 | composition gaps filled (damage balance, frontline, engage, peel) | reviewed champion tags |
@@ -167,18 +167,31 @@ may be red since 2026) with hard Fearless locks.
 | win-probability change after the enemy's 3 likeliest answers (depth-1 expectimax) | outcome model — weak evidence |
 | bans: their likely next pick × their players' comfort, coach must-bans | LambdaRank from the enemy's side |
 
+**Roles.** Each pick takes its primary role (the first role in `champion_tags.csv`) if still free, else its next
+tagged role, else any free role. The same rule feeds the draft model's role-fit features, the recommender's open
+roles and lane matchups, and the outcome model's lineup, so every champion picked reaches the win probability.
+
+**Save list.** A champion is "saved" in a game when the coach's save list holds it (games 1–2) or the planner's save
+plan keeps it for a later game. Mode *Best options* keeps saved champions with a penalty and says why; *Respect save
+list* leaves them out. Must-bans match the opponent by name prefix or id ("Team Liquid" matches "Team Liquid
+Alienware"), are always on the ban list, and scale with `preferences.weight` (0 turns coach input off).
+
 **Live win probability**: 24 completions of the draft sampled from LambdaRank (both teams), averaged with the outcome
 model, shown with a 10–90% range. **Series simulator** (`POST /series/simulate`): Monte Carlo of Bo3/Bo5 with hard
-Fearless, our side skipping champions the coach rules out, the loser taking first pick next game (assumption);
+Fearless, our side skipping champions the coach rules out (a player's "refuses" blocks a champion only when no
+teammate plays it), the loser taking first pick next game and the winner then choosing blue side (2026 First
+Selection; who chooses what is an assumption);
 outputs series win probability ± Monte Carlo error, champion availability per game, each player's remaining
 comfortable pool, and plan comparisons flagged "within noise" when |difference| < 2 SE.
 
-**Back-test** (`fele backtest`, models trained on development series only, holdout drafts, state as of each game):
-the actual pick is LambdaRank's top option 16.8% / in its top 5 48.8%; the recommender's re-ranking (adding
-composition, style and lane) matches pros slightly *less* (15.1% / 47.8%) — expected, since those parts deliberately
-pull away from "what pros do here". Whether that wins more can't be measured: draft effects on win probability are
-below what this data can detect (Phase 8). The Fearless property test found and fixed a simulator bug (a series could
-play twice in one round).
+**Back-test** (`fele backtest`, the last 2 development months, draft model trained on earlier series only, state
+as of each game; the holdout is not used again): of 1,332 actual picks, 1,271 were among the engine's candidates (the
+rest count as misses). The actual pick is the draft model's top option 12.7% / in its top 5 45.6%; the recommender's
+re-ranking (adding composition, style and lane) is level with it (12.9% / 45.8%, difference +0.2 pp
+[−1.1, +1.5]). Matching pros is a sanity check, not the goal; whether the re-ranking wins more can't be measured,
+since draft effects on win probability are below what this data can detect (Phase 8). The first version ran on
+holdout drafts and skipped picks the engine couldn't offer, which inflated it (16.8% / 48.8%); a code review caught
+both. The Fearless property test found and fixed a simulator bug (a series could play twice in one round).
 
 ## "How to win" cards (Phase 10, `GET /teams/{id}/cards`)
 
@@ -191,7 +204,7 @@ Cards only restate numbers computed elsewhere, each with its evidence count and 
 | players | `stats_ban_targets` | the player whose pool absorbs the most bans faced |
 | players | `/players` | current player (n ≥ 20) with the smallest effective pool, with its 95% interval |
 | macro | `stats_macro_rates` | 3 non-noise tendencies with the lowest p-value |
-| model | LambdaRank, live context | their 3 likeliest first bans / first picks vs us, with the holdout top-10 hit rate |
+| model | LambdaRank, live context | their 3 likeliest first bans / first picks vs us, with the walk-forward top-10 hit rate |
 
 The series planner and mock draft run in the browser on top of `/draft/recommend` and `/series/simulate`; the plan
 and coach inputs live in `localStorage` and can be exported as JSON (plan also as CSV).

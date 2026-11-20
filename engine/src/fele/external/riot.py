@@ -124,7 +124,12 @@ class RiotClient:
         limiter = self.limiters.setdefault(host, RateLimiter())
         for attempt in range(MAX_RETRIES):
             await limiter.acquire()
-            r = await self._http.get(url)
+            try:
+                r = await self._http.get(url)
+            except httpx.TransportError as e:  # timeouts, resets: retry with backoff like a 5xx
+                log.warning("%s on %s, retrying", type(e).__name__, host)
+                limiter.blocked_until = max(limiter.blocked_until, time.monotonic() + 2**attempt)
+                continue
             if not limiter.synced and (lim := parse_limits(r.headers.get("X-App-Rate-Limit"))):
                 limiter.set_limits(lim)
                 limiter.synced = True
@@ -140,7 +145,7 @@ class RiotClient:
                 self.throttled += status == HTTPStatus.TOO_MANY_REQUESTS
                 delay = float(r.headers.get("Retry-After", 2**attempt))
                 log.warning("%s %s on %s, sleeping %.1fs", status, host, path.split("/")[3], delay)
-                limiter.blocked_until = time.monotonic() + delay
+                limiter.blocked_until = max(limiter.blocked_until, time.monotonic() + delay)
                 continue
             if status in (HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN):
                 raise RuntimeError(f"Riot API {status}: key missing, invalid or expired (dev keys last 24h)")

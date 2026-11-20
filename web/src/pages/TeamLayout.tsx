@@ -19,7 +19,7 @@ const PERIODS = [
 export function TeamLayout() {
   const teamId = useTeamId()
   const [period, setPeriod] = usePeriod()
-  const [, setPlan] = usePlan()
+  const [plan, setPlan] = usePlan()
   const navigate = useNavigate()
   const team = useQuery({ queryKey: ['teams'], queryFn: api.teams }).data?.find((t) => t.team_id === teamId)
   return (
@@ -40,7 +40,14 @@ export function TeamLayout() {
           <button
             type="button"
             onClick={() => {
-              setPlan({ ...EMPTY_PLAN, opponent: teamId })
+              // same opponent: keep the plan; another one: replace it, after a confirm if it has games or saves
+              if (plan.opponent !== teamId) {
+                const inProgress = plan.games.length > 0 || Object.keys(plan.save).length > 0
+                if (inProgress && !globalThis.confirm('Replace the current series plan (its games and save list)?')) {
+                  return
+                }
+                setPlan({ ...EMPTY_PLAN, opponent: teamId })
+              }
               navigate('/planner')
             }}
             className="min-h-9 cursor-pointer rounded-md bg-primary px-3 text-sm font-medium text-bg"

@@ -11,19 +11,22 @@ import {
   EMPTY_PLAN,
   lockedBy,
   type PlannedGame,
+  playedGames,
   type SeriesPlanState,
   useChampions,
   usePlan,
   usePrefs,
+  weBlueNext,
   weFirstNext,
 } from '../hooks.ts'
-import { download } from '../store.ts'
+import { download, newId } from '../store.ts'
 
 const BEST_OF = [
   ['3', 'Best of 3'],
   ['5', 'Best of 5'],
 ] as const
 const COMFORT_POOL = new Set(['signature', 'comfortable'])
+const FORMULA_START = /^[=+\-@]/u
 
 function toCsv(plan: SeriesPlanState): string {
   const rows = [['game', 'result', 'our picks', 'their picks', 'bans']]
@@ -31,7 +34,9 @@ function toCsv(plan: SeriesPlanState): string {
     rows.push([String(i + 1), g.result ?? '', g.ours.join('|'), g.theirs.join('|'), g.bans.join('|')])
   })
   rows.push([], ['save', 'from game'], ...Object.entries(plan.save).map(([c, game]) => [c, String(game)]))
-  return rows.map((r) => r.map((v) => `"${v.replaceAll('"', '""')}"`).join(',')).join('\n')
+  // a leading = + - @ would run as a formula in a spreadsheet: prefix it with ' (CSV injection)
+  const cell = (v: string) => `"${(FORMULA_START.test(v) ? `'${v}` : v).replaceAll('"', '""')}"`
+  return rows.map((r) => r.map(cell).join(',')).join('\n')
 }
 
 function GameEditor({
@@ -49,9 +54,12 @@ function GameEditor({
 }) {
   const listId = useId()
   const edit = (team: 'ours' | 'theirs', slot: number, value: string) => {
-    const next = [...game[team]]
-    next[slot] = value
-    onChange({ ...game, [team]: next.filter((v, i) => v || i < next.length - 1) })
+    // keep every slot in place ('' = empty); only trailing empty slots are dropped
+    const next = Array.from({ length: 5 }, (_, i) => (i === slot ? value : (game[team][i] ?? '')))
+    while (next.length > 0 && !next.at(-1)) {
+      next.pop()
+    }
+    onChange({ ...game, [team]: next })
   }
   return (
     <article className="rounded-lg border border-line bg-surface p-3">
@@ -62,12 +70,13 @@ function GameEditor({
             label={`Game ${index + 1} result`}
             options={
               [
+                ['planned', 'Not played'],
                 ['won', 'Won'],
                 ['lost', 'Lost'],
               ] as const
             }
-            value={game.result ?? 'won'}
-            onChange={(result) => onChange({ ...game, result })}
+            value={game.result ?? 'planned'}
+            onChange={(r) => onChange({ ...game, result: r === 'planned' ? null : r })}
           />
           <button
             type="button"
@@ -172,13 +181,13 @@ export function PlannerPage() {
   const [saveChamp, setSaveChamp] = useState('')
   const [saveGame, setSaveGame] = useState(3)
   const allChampionsId = useId()
-  const locked = lockedBy(plan)
+  const locked = lockedBy(plan, champions.byName)
   const theirPlayers = useQuery({
     queryKey: ['players', plan.opponent],
     queryFn: () => api.players(plan.opponent),
     enabled: Boolean(plan.opponent),
   })
-  const played = plan.games.filter((g) => g.result !== null)
+  const played = playedGames(plan)
   const wins = played.filter((g) => g.result === 'won').length
   const losses = played.length - wins
   const keys = [
@@ -199,11 +208,12 @@ export function PlannerPage() {
         we_start_blue: plan.weStartBlue,
         save: plan.save,
         sims: 200,
-        start_game: plan.games.length + 1 + (branchLoss ? 1 : 0),
+        start_game: played.length + 1 + (branchLoss ? 1 : 0),
         wins,
         losses: losses + (branchLoss ? 1 : 0),
         locked: [...locked.keys()],
-        we_first_next: branchLoss ? true : weFirstNext(plan),
+        we_first_next: branchLoss ? true : weFirstNext(plan), // the loser picks first, the winner takes blue
+        we_blue_next: branchLoss ? false : weBlueNext(plan),
         key_champions: keys,
         preferences: prefs,
       }
@@ -291,7 +301,7 @@ export function PlannerPage() {
             onChange={(v) => setPlan({ ...plan, weStartBlue: v === 'blue' })}
           />
           <span className="text-sm text-muted">
-            Score {wins}–{losses} · next: game {plan.games.length + 1}
+            Score {wins}–{losses} · next: game {played.length + 1}
           </span>
         </div>
       </Section>
@@ -318,7 +328,7 @@ export function PlannerPage() {
               onClick={() =>
                 setPlan({
                   ...plan,
-                  games: [...plan.games, { id: crypto.randomUUID(), ours: [], theirs: [], bans: [], result: 'won' }],
+                  games: [...plan.games, { id: newId(), ours: [], theirs: [], bans: [], result: null }],
                 })
               }
               className="cursor-pointer text-primary underline"
@@ -471,7 +481,7 @@ export function PlannerPage() {
         ) : null}
         {simulate.variables === true && simulate.data ? (
           <p className="mb-2 text-xs text-muted">
-            Branch: we lose game {plan.games.length + 1}. Its picks are unknown, so only the locks so far are applied.
+            Branch: we lose game {played.length + 1}. Its picks are unknown, so only the locks so far are applied.
           </p>
         ) : null}
         {simulate.data ? <Results data={simulate.data} keys={keys} /> : null}

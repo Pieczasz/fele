@@ -3,7 +3,8 @@
 Each simulated game: both teams draft with the draft-action model (LambdaRank) — our picks skip champions the coach
 rules out (never-pick, refuses) and any champion a plan saves for later games — then the winner is drawn from the
 outcome model's win probability. Hard Fearless: every champion picked in a game is unavailable for the rest of that
-series. Side rule (assumption, configurable by the caller): the loser of a game takes first pick on blue side next.
+series. Side rule (2026 First Selection, assumption for who chooses what): the loser of a game takes first pick next
+game and the winner then chooses blue side. Game 1's side and pick order come from the caller.
 
 Outputs come with their Monte Carlo error. Comparing plans uses common random numbers (same seed), so a difference
 reflects the plan, not luck — but the outcome model is Elo-dominated, so plan differences are small by construction.
@@ -15,7 +16,7 @@ import numpy as np
 
 from fele.engine.draft import THEM, US, DraftState
 from fele.engine.live import Live
-from fele.engine.recommend import Matchup, action_probs, matchup, win_prob
+from fele.engine.recommend import Matchup, action_probs, matchup, saved_for_later, win_prob
 from fele.prefs import Comfort, Preferences
 
 SIMS = 200
@@ -45,7 +46,8 @@ class SeriesStart:
     wins: int = 0
     losses: int = 0
     locked: frozenset[str] = frozenset()  # champions already picked in this series (hard Fearless)
-    we_first: bool = True  # we have first pick / blue side in the next game
+    we_first: bool = True  # we have first pick in the next game
+    we_blue: bool | None = None  # we are blue in the next game (None: same as we_first)
 
 
 @dataclass
@@ -54,17 +56,22 @@ class _Sim:
     games: list[tuple[list[str], list[str]]] = field(default_factory=list[tuple[list[str], list[str]]])
     wins: int = 0
     losses: int = 0
-    we_first: bool = True  # first pick and blue side
+    we_first: bool = True
+    we_blue: bool = True
 
     def done(self, need: int) -> bool:
         return self.wins >= need or self.losses >= need
 
 
 def _blocked(prefs: Preferences | None, save: dict[str, int], game: int) -> set[str]:
-    out = {c for c, until in save.items() if game < until}
+    """Champions our side won't pick this game: saved for later, never-pick, and refusals no teammate covers (the
+    simulated draft doesn't know which player takes a pick, so one player's refusal can't block it for everyone)."""
+    out = saved_for_later(prefs, save, game)
     if prefs is not None:
         out |= set(prefs.strategy.never_pick)
-        out |= {n.champion for p in prefs.players for n in p.pool if n.comfort == Comfort.refuses}
+        refused = {n.champion for p in prefs.players for n in p.pool if n.comfort == Comfort.refuses}
+        played = {n.champion for p in prefs.players for n in p.pool if n.comfort != Comfort.refuses}
+        out |= refused - played
     return out
 
 
@@ -105,7 +112,13 @@ def simulate(  # noqa: PLR0913 - one series setup
     need = best_of // 2 + 1
     start = start or SeriesStart(we_first=we_start_blue)
     runs = [
-        _Sim(locked=set(start.locked), wins=start.wins, losses=start.losses, we_first=start.we_first)
+        _Sim(
+            locked=set(start.locked),
+            wins=start.wins,
+            losses=start.losses,
+            we_first=start.we_first,
+            we_blue=start.we_first if start.we_blue is None else start.we_blue,
+        )
         for _ in range(sims)
     ]
     pools = {
@@ -126,8 +139,12 @@ def simulate(  # noqa: PLR0913 - one series setup
             )
         # split BEFORE playing: a game flips first pick to the loser, which must not move a series into the other
         # group and let it play twice in one round (found by the Fearless property test)
-        groups = {blue: [r for r in alive if r.we_first == blue] for blue in (True, False)}
-        for blue, group in groups.items():
+        groups = {
+            (first, blue): [r for r in alive if (r.we_first, r.we_blue) == (first, blue)]
+            for first in (True, False)
+            for blue in (True, False)
+        }
+        for (_, blue), group in groups.items():
             if not group:
                 continue
             m = matchup(live, us, them, we_are_blue=blue, game_number=game)
@@ -138,7 +155,7 @@ def simulate(  # noqa: PLR0913 - one series setup
                 r.wins, r.losses = r.wins + won, r.losses + (not won)
                 r.locked |= set(st.picks(US)) | set(st.picks(THEM))
                 r.games.append((st.picks(US), st.picks(THEM)))
-                r.we_first = not won  # the loser takes first pick / blue next game
+                r.we_first, r.we_blue = not won, won  # the loser takes first pick, the winner then picks blue
     outcome = np.array([r.wins >= need for r in runs], float)
     return SeriesResult(
         best_of=best_of,
@@ -152,7 +169,7 @@ def simulate(  # noqa: PLR0913 - one series setup
         drafts=[r.games for r in runs] if record else [],
         notes=[
             "Both teams draft as the draft model expects (our side skips champions the coach rules out).",
-            "Side rule assumed: the loser takes first pick on blue side next game.",
+            "Side rule assumed: the loser takes first pick next game and the winner chooses blue side.",
             "Win probabilities are Elo-dominated: different plans change series odds by small amounts.",
         ],
     )

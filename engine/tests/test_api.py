@@ -213,3 +213,29 @@ async def test_demo_password_gate(client: httpx.AsyncClient, monkeypatch: pytest
     await client.post("/logout")
     client.cookies.clear()
     assert (await client.get("/teams")).status_code == 401
+
+
+@pytest.mark.usefixtures("aggregates")
+async def test_bad_cookie_is_401_not_500(client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch):
+    from fele.config import settings  # noqa: PLC0415
+
+    monkeypatch.setenv("DEMO_PASSWORD", "s3cret")
+    settings.cache_clear()
+    # a non-ASCII cookie (latin-1 on the wire): hmac.compare_digest on str would raise TypeError -> 500
+    assert (await client.get("/teams", headers={"cookie": b"fele_session=caf\xe9"})).status_code == 401
+
+
+@pytest.mark.parametrize(
+    ("path", "body"),
+    [
+        ("/series/simulate", {"us": "a", "them": "b", "sims": 100_000}),  # unbounded Monte Carlo = easy DoS
+        ("/series/simulate", {"us": "a", "them": "b", "best_of": 3, "wins": 2}),  # series already over
+        ("/series/simulate", {"us": "a", "them": "b", "start_game": 9}),
+        ("/draft/recommend", {"us": "a", "them": "b", "actions": ["x"] * 21}),
+        ("/draft/recommend", {"us": "a", "them": "b", "game_number": 0}),
+    ],
+)
+@pytest.mark.usefixtures("aggregates")
+async def test_engine_requests_are_bounded(client: httpx.AsyncClient, path: str, body: dict[str, object]):
+    r = await client.post(path, json=body)
+    assert r.status_code == 422  # rejected by validation, before any model work

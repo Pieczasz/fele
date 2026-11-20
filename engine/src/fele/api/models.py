@@ -1,11 +1,13 @@
 """Response models. Every rate comes with its evidence: k of n and a 95% interval (lo, hi)."""
 
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal, Self
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, model_validator
 
 from fele.prefs import Preferences
+
+GameNumber = Annotated[int, Field(ge=1, le=5)]
 
 Period = Literal["recent", "all"]
 Tendency = Literal["strong", "weak", "noise"]
@@ -196,11 +198,12 @@ class DraftRequest(BaseModel):
     them: str
     we_are_blue: bool = True
     we_pick_first: bool = True
-    actions: list[str] = []  # champions in pro draft order so far ("" = skipped ban)
-    locked: list[str] = []  # Fearless: champions picked in earlier games of this series
-    game_number: int = 1
-    series_score: int = 0  # our wins - their wins so far
+    actions: Annotated[list[str], Field(max_length=20)] = []  # champions in pro draft order ("" = skipped ban)
+    locked: Annotated[list[str], Field(max_length=40)] = []  # Fearless: champions picked in earlier games
+    game_number: Annotated[int, Field(ge=1, le=5)] = 1
+    series_score: Annotated[int, Field(ge=-2, le=2)] = 0  # our wins - their wins so far
     mode: Literal["best", "comfort_only", "save"] = "best"
+    save: Annotated[dict[str, GameNumber], Field(max_length=60)] = {}  # planner: champion -> first game we may pick it
     preferences: Preferences | None = None  # the coach's own edits (kept in their browser); default: server file
 
 
@@ -235,7 +238,6 @@ class CompOut(BaseModel):
     totals: dict[str, float]
     scaling: str
     warnings: list[str]
-    contribution: dict[str, float]
 
 
 class Likely(BaseModel):
@@ -258,15 +260,24 @@ class SeriesRequest(BaseModel):
     them: str
     best_of: Literal[1, 3, 5] = 3
     we_start_blue: bool = True
-    save: dict[str, int] = {}  # champion -> first game we may pick it (Fearless plan)
-    sims: int = 200
-    start_game: int = 1  # scenario branches: where the series stands
-    wins: int = 0
-    losses: int = 0
-    locked: list[str] = []
-    we_first_next: bool | None = None  # first pick / blue in the next game (default: we_start_blue)
-    key_champions: list[str] = []  # champions to track availability for (default: our comfortable pools)
+    save: Annotated[dict[str, GameNumber], Field(max_length=60)] = {}  # champion -> first game we may pick it
+    sims: Annotated[int, Field(ge=20, le=500)] = 200
+    start_game: GameNumber = 1  # scenario branches: where the series stands
+    wins: Annotated[int, Field(ge=0, le=2)] = 0
+    losses: Annotated[int, Field(ge=0, le=2)] = 0
+    locked: Annotated[list[str], Field(max_length=40)] = []
+    we_first_next: bool | None = None  # first pick in the next game (default: we_start_blue)
+    we_blue_next: bool | None = None  # blue side in the next game (default: same as we_first_next)
+    key_champions: Annotated[list[str], Field(max_length=60)] = []  # default: our comfortable pools
     preferences: Preferences | None = None
+
+    @model_validator(mode="after")
+    def _consistent(self) -> Self:
+        need = self.best_of // 2 + 1
+        if self.wins >= need or self.losses >= need or self.start_game > self.best_of:
+            msg = "the series is already over at this score"
+            raise ValueError(msg)
+        return self
 
 
 class SeriesOut(BaseModel):

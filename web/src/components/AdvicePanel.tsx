@@ -3,7 +3,7 @@ import { pct } from '../format.ts'
 import { ChampionIcon } from './ChampionIcon.tsx'
 import { Section } from './QueryState.tsx'
 
-export function WinProbBar({ mean, p10, p90, note }: { mean: number; p10: number; p90: number; note: string }) {
+function WinProbBar({ mean, p10, p90, note }: { mean: number; p10: number; p90: number; note: string }) {
   return (
     <div title={note}>
       <div className="mb-1 flex justify-between text-sm">

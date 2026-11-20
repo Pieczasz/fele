@@ -1,7 +1,7 @@
 """`fele stats`: every Phase 5 table → data_local/aggregates/stats_*.parquet (DuckDB schema `aggregates`).
 
 Needs `fele ingest` and `fele static` (and optionally `fele soloq-aggregate` for the live meta).
-Team tables come in two periods: `all` games and `recent` (the last 120 days before `as_of`).
+Team tables come in two periods: `all` games and `recent` (each team's last 120 days, or before `as_of` if given).
 """
 
 from collections.abc import Callable
@@ -67,12 +67,14 @@ def build(as_of: datetime | None = None) -> dict[str, int]:
     tg = data.team_games(ctx)
     draft_actions, parts = data.read("draft_actions"), data.read("participants")
     parts_ctx = parts.join(ctx.select("game_id", "started_at", "patch", "league"), on="game_id")
+    per_team = as_of is None  # default: "recent" = each team's own last 120 days (leagues' data end on different dates)
     if as_of is None:
         latest = ctx["started_at"].max()
         if not isinstance(latest, datetime):
             raise TypeError("games.started_at must be a datetime column")
         as_of = latest + timedelta(days=1)
-    periods = {"all": tg, "recent": tg.filter(pl.col("started_at") >= as_of - timedelta(days=RECENT_DAYS))}
+    anchor = pl.col("started_at").max().over("team_id") + pl.duration(days=1) if per_team else pl.lit(as_of)
+    periods = {"all": tg, "recent": tg.filter(pl.col("started_at") >= anchor - timedelta(days=RECENT_DAYS))}
 
     grid_patches = data.patches(ctx)
     grid_windows = data.trailing_windows(grid_patches)
@@ -82,7 +84,7 @@ def build(as_of: datetime | None = None) -> dict[str, int]:
         draft_actions, parts, ctx.select("game_id", "patch"), windows, cmap, soloq=soloq, deltas=deltas
     )
 
-    pc = pools.player_champions(parts_ctx, as_of)
+    pc = pools.player_champions(parts_ctx, None if per_team else as_of)
     latest = parts_ctx.sort("started_at").unique("player_id", keep="last").select("player_id", "player_name", "team_id")
     players = pools.player_summary(pc, _meta_by_role(meta_table)).join(latest, on="player_id")
 

@@ -37,7 +37,7 @@ def authorized(request: Request) -> bool:
     password = _password()
     if password is None:
         return True
-    return hmac.compare_digest(request.cookies.get(COOKIE, ""), _token(password))
+    return hmac.compare_digest(request.cookies.get(COOKIE, "").encode(), _token(password).encode())  # bytes: any input
 
 
 async def login(password: str, request: Request, response: Response) -> bool:

@@ -35,11 +35,13 @@ def game_context(games: pl.DataFrame, series: pl.DataFrame) -> pl.DataFrame:
 
 
 def team_games(ctx: pl.DataFrame) -> pl.DataFrame:
-    """One row per team-game: team_id, opponent_id, side, win + game context."""
+    """One row per team-game: team_id, opponent_id, side, win + game context. Games without a winner (unfinished in
+    the data) are left out rather than counted as losses."""
     sides = [("blue", "blue_team_id", "red_team_id"), ("red", "red_team_id", "blue_team_id")]
+    finished = ctx.filter(pl.col("winner_team_id").is_not_null())
     return pl.concat(
         [
-            ctx.with_columns(
+            finished.with_columns(
                 team_id=pl.col(me),
                 opponent_id=pl.col(opp),
                 side=pl.lit(side),

@@ -25,9 +25,12 @@ def db_path() -> Path:
 
 
 def write_tables(out: Path, tables: dict[str, pl.DataFrame]) -> dict[str, int]:
-    """Write each frame to out/<name>.parquet and return the row counts."""
+    """Write each frame to out/<name>.parquet and return the row counts. Each file is written to a temporary name and
+    renamed into place, so a running API never reads a half-written file."""
     for name, df in tables.items():
-        df.write_parquet(out / f"{name}.parquet")
+        tmp = out / f".{name}.parquet.tmp"
+        df.write_parquet(tmp)
+        tmp.replace(out / f"{name}.parquet")
     return {name: df.height for name, df in tables.items()}
 
 

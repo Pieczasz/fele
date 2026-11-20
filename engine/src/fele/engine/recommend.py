@@ -24,7 +24,7 @@ import polars as pl
 from fele.engine.draft import THEM, US, DraftState
 from fele.engine.live import Live, Player
 from fele.features import state
-from fele.models.action import open_roles
+from fele.models.action import open_roles, role_assignment
 from fele.prefs import Comfort, Preferences
 
 type Floats = npt.NDArray[np.float64]
@@ -49,6 +49,7 @@ LATE_GAME = 3
 REPLIES = 3  # enemy answers considered by the depth-1 expectimax
 ROLLOUTS = 24
 SHORTLIST = 12
+DEFAULT_WEIGHT = 0.5  # preferences.weight default; coach ban bonus = BAN_W['coach'] at this weight
 Mode = Literal["best", "comfort_only", "save"]
 
 
@@ -71,8 +72,8 @@ class Matchup:
         ours = [p.player_id for p in self.our_players]
         theirs = [p.player_id for p in self.their_players]
         self.cand = {
-            US: lv.builder.live_candidates(self.us, ours, theirs, lv.patch, lv.now),
-            THEM: lv.builder.live_candidates(self.them, theirs, ours, lv.patch, lv.now),
+            US: lv.builder.live_candidates(self.us, ours, theirs, lv.patch, lv.now_for(self.us)),
+            THEM: lv.builder.live_candidates(self.them, theirs, ours, lv.patch, lv.now_for(self.them)),
         }
         self.pmi = lv.builder.pmi(lv.patch)
 
@@ -134,7 +135,7 @@ def action_probs(m: Matchup, states: list[DraftState], *, as_pick_for: str | Non
         opp_syn.append(m.pmi[theirs].mean(axis=0) if theirs else np.zeros(v, np.float32))
     act = state.ActionData(
         vocab=lv.vocab,
-        champ_roles=lv.roles,
+        role_rank=lv.roles,
         team_x=np.stack([m.cand[US], m.cand[THEM]]),
         rows=pl.DataFrame(rows),
         unavailable=np.stack(unavailable),
@@ -148,16 +149,10 @@ def action_probs(m: Matchup, states: list[DraftState], *, as_pick_for: str | Non
 
 # --- roles and win probability -----------------------------------------------------------------------------------
 def assign_roles(live: Live, champs: list[str]) -> dict[str, str]:
-    """champion -> role: each pick takes its first tagged role still free (the same rule the draft model uses)."""
-    out: dict[str, str] = {}
-    free = set(ROLES)
-    for c in champs:
-        i = live.builder.index.get(c)
-        options = [r for k, r in enumerate(ROLES) if i is not None and live.roles[i, k] and r in free]
-        if options:
-            out[c] = options[0]
-            free.discard(options[0])
-    return out
+    """champion -> role: each pick takes its primary role if free, else its next tagged role, else any free role
+    (`role_assignment`, the same rule the draft model uses). Every pick gets a role, so all five reach the model."""
+    known = [c for c in champs if c in live.builder.index]
+    return {c: ROLES[k] for c, k in zip(known, role_assignment(_idx(live, known), live.roles), strict=True)}
 
 
 def _lineup(live: Live, players: list[Player], champs: list[str]) -> list[tuple[str, str]]:
@@ -171,10 +166,15 @@ def win_prob(m: Matchup, ours: list[str], theirs: list[str]) -> float:
     side_us, side_them = ("blue", "red") if m.we_are_blue else ("red", "blue")
     f = {
         side_us: lv.builder.live_team_features(
-            m.us, _lineup(lv, m.our_players, ours), lv.patch, lv.now, lv.ratings.get(m.us, 1500.0), side_us
+            m.us, _lineup(lv, m.our_players, ours), lv.patch, lv.now_for(m.us), lv.ratings.get(m.us, 1500.0), side_us
         ),
         side_them: lv.builder.live_team_features(
-            m.them, _lineup(lv, m.their_players, theirs), lv.patch, lv.now, lv.ratings.get(m.them, 1500.0), side_them
+            m.them,
+            _lineup(lv, m.their_players, theirs),
+            lv.patch,
+            lv.now_for(m.them),
+            lv.ratings.get(m.them, 1500.0),
+            side_them,
         ),
     }
     blue_minus_red = {f"d_{k}": f["blue"][k] - f["red"][k] for k in state.TEAM_FEATURES}
@@ -275,7 +275,7 @@ class _PickContext:
     opp_roles: dict[str, str]
     prefs: Preferences | None
     mode: Mode
-    save_applies: bool
+    saved: set[str]  # champions kept for a later game of this series (coach list + the planner's save plan)
 
 
 def _score_pick(m: Matchup, ctx: _PickContext, champ: str, role: str, p: float) -> Option | None:
@@ -293,7 +293,7 @@ def _score_pick(m: Matchup, ctx: _PickContext, champ: str, role: str, p: float) 
         reasons.append(f"coach: {comfort} for the {role}")
     player = _player(m, role)
     if player is not None:
-        recency, wr, n = lv.builder.st.player_on(player.player_id, lv.builder.index[champ], lv.now)
+        recency, wr, n = lv.builder.st.player_on(player.player_id, lv.builder.index[champ], lv.now_for(m.us))
         if n:
             parts["form"] = W["form"] * recency
             reasons.append(f"{player.name}: {n} pro games on it (adj. win rate {wr:.0%})")
@@ -307,25 +307,52 @@ def _score_pick(m: Matchup, ctx: _PickContext, champ: str, role: str, p: float) 
         parts["lane"] = W["lane"] * (wr - 0.5)
         if games >= 10:  # noqa: PLR2004
             reasons.append(f"vs {enemy}: {wr:.0%} adj. win rate in high-elo solo queue ({games} games)")
-    if ctx.save_applies and prefs is not None and champ in prefs.strategy.save_for_late_games:
+    if champ in ctx.saved:
         parts["save"] = -W["save"]
-        reasons.append("coach saves it for later games (Fearless)")
+        reasons.append("saved for a later game of this series (Fearless)")
     return Option(champ, role, sum(parts.values()), parts, reasons)
 
 
-def recommend_pick(m: Matchup, s: DraftState, prefs: Preferences | None = None, mode: Mode = "best") -> list[Option]:
+def saved_for_later(prefs: Preferences | None, save: dict[str, int] | None, game: int) -> set[str]:
+    """Champions not to spend in this game: the coach's save list before game LATE_GAME, and the planner's save plan
+    (champion -> first game we may pick it in)."""
+    out = {c for c, first in (save or {}).items() if game < first}
+    if prefs is not None and game < LATE_GAME:
+        out |= set(prefs.strategy.save_for_late_games)
+    return out
+
+
+def coach_for_opponent(table: dict[str, list[str]], *names: str) -> set[str]:
+    """Coach entries keyed by a team name, matched case-insensitively to the opponent's name or id, or as a prefix
+    of it ("Team Liquid" matches "Team Liquid Alienware")."""
+    keys = [n.strip().lower() for n in names if n.strip()]
+    return {
+        c
+        for team, champs in table.items()
+        if team.strip() and any(k.startswith(team.strip().lower()) for k in keys)
+        for c in champs
+    }
+
+
+def recommend_pick(
+    m: Matchup, s: DraftState, prefs: Preferences | None = None, mode: Mode = "best", save: dict[str, int] | None = None
+) -> list[Option]:
+    """mode "save" leaves saved champions out; "best" keeps them with a penalty; "comfort_only" keeps the coach's
+    signature/comfortable picks only."""
     lv = m.live
     ours, theirs = s.picks(US), s.picks(THEM)
     probs = action_probs(m, [s])[0]
     free = open_roles(np.array([(_idx(lv, ours) + [-1] * 4)[:4]], np.int32), lv.roles)[0]
+    saved = saved_for_later(prefs, save, m.game_number)
     never: set[str] = set(prefs.strategy.never_pick) if prefs else set()
-    ctx = _PickContext(
-        ours, theirs, assign_roles(lv, theirs), prefs, mode, save_applies=mode == "save" or m.game_number < LATE_GAME
-    )
+    if mode == "save":
+        never |= saved
+    ctx = _PickContext(ours, theirs, assign_roles(lv, theirs), prefs, mode, saved)
     options: list[Option] = []
     for c in np.argsort(-probs):
         champ, p = str(lv.vocab[int(c)]), float(probs[c])
-        roles = [r for k, r in enumerate(ROLES) if lv.roles[c, k] and free[k]]
+        rank = lv.roles[c]
+        roles = [ROLES[int(k)] for k in np.argsort(rank, kind="stable") if rank[k] < state.UNTAGGED and free[k]]
         if p > 0 and roles and champ not in never and (opt := _score_pick(m, ctx, champ, roles[0], p)) is not None:
             options.append(opt)
         if len(options) >= SHORTLIST * 2:
@@ -358,15 +385,20 @@ def recommend_ban(m: Matchup, s: DraftState, prefs: Preferences | None = None, e
     threat = action_probs(m, [s], as_pick_for=THEM)[0]
     pro = action_probs(m, [s])[0]
     their_comfort = m.cand[US][:, 6]  # opponent players' recency-weighted pool (log1p games)
-    must: set[str] = set(prefs.strategy.must_ban_vs_opponent.get(enemy_name, [])) if prefs else set()
-    hated: set[str] = {c for p in prefs.players for c in p.hates_playing_against} if prefs else set()
+    weight = prefs.weight if prefs else 0.0
+    their_now = lv.now_for(m.them)
+    must: set[str] = (
+        coach_for_opponent(prefs.strategy.must_ban_vs_opponent, enemy_name, m.them) if prefs and weight else set()
+    )
+    hated: set[str] = {c for p in prefs.players for c in p.hates_playing_against} if prefs and weight else set()
     ours, theirs = s.picks(US), s.picks(THEM)
     base = win_prob(m, ours, theirs)
+    shortlist = [int(c) for c in np.argsort(-(threat + pro))[: SHORTLIST * 2] if threat[c] > 0 or pro[c] > 0]
+    taken = s.taken()
+    coach_idx = [lv.builder.index[c] for c in sorted(must | hated) if c in lv.builder.index and c not in taken]
     options: list[Option] = []
-    for c in np.argsort(-(threat + pro))[: SHORTLIST * 2]:
-        champ = str(lv.vocab[int(c)])
-        if threat[c] <= 0 and pro[c] <= 0:
-            continue
+    for c in dict.fromkeys(shortlist + coach_idx):  # coach picks are scored even when the model ranks them low
+        champ = str(lv.vocab[c])
         parts = {
             "threat": BAN_W["threat"] * np.log(threat[c] + 1e-4),
             "comfort": BAN_W["comfort"] * float(their_comfort[c]),
@@ -375,27 +407,35 @@ def recommend_ban(m: Matchup, s: DraftState, prefs: Preferences | None = None, e
         reasons = [f"they pick it {threat[c]:.0%} of the time at their next pick (model)"]
         best = max(
             (p for p in m.their_players),
-            key=lambda p: lv.builder.st.player_on(p.player_id, int(c), lv.now)[2],
+            key=lambda p: lv.builder.st.player_on(p.player_id, int(c), their_now)[2],
             default=None,
         )
-        if best is not None and (n := lv.builder.st.player_on(best.player_id, int(c), lv.now)[2]):
+        if best is not None and (n := lv.builder.st.player_on(best.player_id, int(c), their_now)[2]):
             reasons.append(f"denies {best.name}: {n} pro games on it")
         if champ in must or champ in hated:
-            parts["coach"] = BAN_W["coach"]
+            parts["coach"] = BAN_W["coach"] * weight / DEFAULT_WEIGHT
             reasons.append("coach: must-ban vs this opponent" if champ in must else "a player hates playing against it")
         loss = base - win_prob(m, ours, [*theirs, champ])
         parts["edge"] = BAN_W["edge"] * loss
         if loss >= 0.005:  # noqa: PLR2004 - only when their getting it hurts us
             reasons.append(f"if they get it: {-loss:+.1%} win probability for us (weak evidence)")
         options.append(Option(champ, None, sum(parts.values()), parts, reasons))
-    return sorted(options, key=_by_score)[:TOP_N]
+    ranked = sorted(options, key=_by_score)
+    top = ranked[:TOP_N]
+    missing = [o for o in ranked[TOP_N:] if o.champion in must]  # a must-ban is always on the list
+    return [*top[: TOP_N - len(missing)], *missing] if missing else top
 
 
 def recommend(
-    m: Matchup, s: DraftState, prefs: Preferences | None = None, mode: Mode = "best", enemy_name: str = ""
+    m: Matchup,
+    s: DraftState,
+    prefs: Preferences | None = None,
+    mode: Mode = "best",
+    enemy_name: str = "",
+    save: dict[str, int] | None = None,
 ) -> list[Option]:
     if s.complete or s.who(s.slot) != US:
         return []
     if s.kind(s.slot) == "ban":
         return recommend_ban(m, s, prefs, enemy_name)
-    return recommend_pick(m, s, prefs, mode)
+    return recommend_pick(m, s, prefs, mode, save)

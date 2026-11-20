@@ -9,7 +9,7 @@ Anti-overfitting: L2 strength / softmax temperature are fitted on walk-forward i
 training uses the most recent MAX_TRAIN actions (recent drafts describe the current game best, and it bounds memory).
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 
 import numpy as np
 import numpy.typing as npt
@@ -17,7 +17,7 @@ import polars as pl
 from scipy import optimize
 
 from fele.eval.splits import inner_masks
-from fele.features.state import ActionData
+from fele.features.state import UNTAGGED, ActionData
 from fele.models.sk import Ranker
 
 type Floats = npt.NDArray[np.float64]
@@ -39,16 +39,24 @@ FEATURE_NAMES = (
 )
 
 
-def open_roles(picks: npt.NDArray[np.int32], roles: npt.NDArray[np.bool_]) -> npt.NDArray[np.bool_]:
-    """Roles still free after greedily giving each earlier pick its first free tagged role. (actions, 5)."""
-    free = np.ones((len(picks), roles.shape[1]), bool)
+def role_assignment(picks: Iterable[int], role_rank: npt.NDArray[np.int8]) -> list[int]:
+    """Role index per pick, in pick order: its highest-ranked tagged role still free, else any free role."""
+    free = np.ones(role_rank.shape[1], bool)
+    out: list[int] = []
+    for c in picks:
+        if c < 0:
+            break
+        k = int(np.argmin(np.where(free, role_rank[c], np.iinfo(np.int8).max)))
+        free[k] = False
+        out.append(k)
+    return out
+
+
+def open_roles(picks: npt.NDArray[np.int32], role_rank: npt.NDArray[np.int8]) -> npt.NDArray[np.bool_]:
+    """Roles still free after `role_assignment` of each row's earlier picks. (actions, 5)."""
+    free = np.ones((len(picks), role_rank.shape[1]), bool)
     for r, row in enumerate(picks):
-        for c in row:
-            if c < 0:
-                break
-            options = np.flatnonzero(roles[c] & free[r])
-            if len(options):
-                free[r, options[0]] = False
+        free[r, role_assignment(row, role_rank)] = False
     return free
 
 
@@ -56,11 +64,11 @@ def features(rows: pl.DataFrame, act: ActionData) -> F32:
     """(actions, V, len(FEATURE_NAMES)) candidate features for the given action rows."""
     idx = rows["idx"].to_numpy()
     base = act.team_x[rows["gt"].to_numpy()]  # (n, V, 8)
-    roles = act.champ_roles
-    own_open = open_roles(act.own_picks[idx], roles)
-    opp_open = open_roles(act.opp_picks[idx], roles)
-    fit_own = (roles[None].astype(np.float32) * own_open[:, None, :]).max(axis=2)
-    fit_opp = (roles[None].astype(np.float32) * opp_open[:, None, :]).max(axis=2)
+    tagged = (act.role_rank < UNTAGGED).astype(np.float32)
+    own_open = open_roles(act.own_picks[idx], act.role_rank)
+    opp_open = open_roles(act.opp_picks[idx], act.role_rank)
+    fit_own = (tagged[None] * own_open[:, None, :]).max(axis=2)
+    fit_opp = (tagged[None] * opp_open[:, None, :]).max(axis=2)
     x = np.stack(
         [
             np.log(base[..., 0] + EPS),

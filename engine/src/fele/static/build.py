@@ -92,7 +92,8 @@ def role_gaps(min_games: int = 5, min_share: float = 0.2) -> pl.DataFrame:
 
 
 def champion_map(latest: dict[str, JsonObj]) -> pl.DataFrame:
-    """GRID characters.csv plus champions seen only in drafts (characters.csv omits never-picked ones, e.g. Graves)."""
+    """GRID characters.csv, champions seen only in drafts (characters.csv omits never-picked ones, e.g. Graves), and
+    every other Data Dragon champion (grid_character_id null) so the vocabulary and the draft board are complete."""
     mapping = build_mapping({"data": latest})
     pairs = {(ch["character_id"], ch["name"]) for ch in read_meta("characters")}
     draft = parquet_dir() / "draft_actions.parquet"
@@ -110,6 +111,13 @@ def champion_map(latest: dict[str, JsonObj]) -> pl.DataFrame:
                 "name": hit["name"] if hit else None,
             }
         )
+    covered = {r["champion"] for r in rows}
+    unique = sorted({c["key"]: c for c in mapping.values()}.values(), key=lambda c: c["name"])
+    rows.extend(  # never seen in GRID (e.g. Kayn): still draftable on the board
+        {"grid_character_id": None, "grid_name": c["name"], "champion": c["key"], "riot_id": c["id"], "name": c["name"]}
+        for c in unique
+        if c["key"] not in covered
+    )
     return pl.DataFrame(rows)
 
 

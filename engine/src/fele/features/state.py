@@ -15,6 +15,7 @@ player assignment is visible once the draft ends, which is when the outcome mode
 """
 
 import math
+import uuid
 from bisect import bisect_left
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
@@ -163,7 +164,7 @@ class _State:
 @dataclass
 class ActionData:
     vocab: list[str]
-    champ_roles: npt.NDArray[np.bool_]  # V x 5 (tagged roles)
+    role_rank: npt.NDArray[np.int8]  # V x 5: 0 = primary role, UNTAGGED = not tagged
     team_x: Floats  # (game-team, V, len(CANDIDATE_FEATURES))
     rows: pl.DataFrame  # one row per action: gt (index into team_x), action, phase, slot, y (true idx), ...
     unavailable: npt.NDArray[np.bool_]  # (actions, V)
@@ -173,20 +174,23 @@ class ActionData:
     opp_synergy: Floats  # (actions, V): same with the opponent's earlier picks (deny value of a ban)
 
 
-def _tags(champions: pl.DataFrame, cmap: pl.DataFrame, vocab: list[str]) -> tuple[Floats, npt.NDArray[np.bool_]]:
+UNTAGGED = 9  # role_rank value for a role the champion isn't tagged with
+
+
+def _tags(champions: pl.DataFrame, cmap: pl.DataFrame, vocab: list[str]) -> tuple[Floats, npt.NDArray[np.int8]]:
+    """Tag matrix and role_rank (V x 5): 0 = primary role, 1 = second tagged role, ..., UNTAGGED otherwise."""
     key = dict(zip(cmap["grid_name"].to_list(), cmap["champion"].to_list(), strict=True))
     tags = {r["champion"]: r for r in champions.iter_rows(named=True)}
     mat = np.zeros((len(vocab), len(TAG_COLS) + 1), np.float32)
-    roles = np.zeros((len(vocab), len(ROLES)), bool)
+    roles = np.full((len(vocab), len(ROLES)), UNTAGGED, np.int8)
     for i, name in enumerate(vocab):
         t = tags.get(key.get(name, ""))
         if t is None:
             continue
         mat[i, : len(TAG_COLS)] = [float(t[c]) for c in TAG_COLS]
         mat[i, -1] = SCALING.get(t["scaling"], 1.0)
-        for r in str(t["roles"]).split("|"):
-            if r in ROLES:
-                roles[i, ROLES.index(r)] = True
+        for rank, r in enumerate(r for r in str(t["roles"]).split("|") if r in ROLES):
+            roles[i, ROLES.index(r)] = rank
     return mat, roles
 
 
@@ -213,7 +217,7 @@ class Builder:
         # vocabulary from the static champion map, never from the games (that set would depend on future drafts)
         self.vocab = sorted(set(inp.cmap["grid_name"].to_list()))
         self.index = {c: i for i, c in enumerate(self.vocab)}
-        self.tag_mat, self.champ_roles = _tags(inp.champions, inp.cmap, self.vocab)
+        self.tag_mat, self.role_rank = _tags(inp.champions, inp.cmap, self.vocab)
         self.delta_by = self._deltas(inp.deltas, inp.cmap)
         self.st = _State(
             self.vocab, self.index, sorted(inp.games["patch"].drop_nulls().unique().to_list(), key=patch_key)
@@ -307,12 +311,15 @@ class Builder:
         self, team: str, lineup: list[tuple[str, str]], patch: str | None, now: datetime, elo: float, side: str
     ) -> dict[str, float]:
         """Outcome-model team features for a hypothetical lineup [(player_id, champion)] drafted now."""
-        gid = f"live-{side}"
+        gid = f"live-{side}-{uuid.uuid4().hex}"  # unique per call: concurrent requests never share a lineup
         self.roster[gid, team] = [(p, c, "") for p, c in lineup]
-        g = {"game_id": gid, f"{side}_team_id": team, "started_at": now, "patch": patch, f"{side}_elo": elo}
-        pick_share, ban_share, wr, _ = self.st.champ_stats(patch)
-        picks = [self.index[c] for _, c in lineup if c in self.index]
-        return self.team_features(g, side, picks, (pick_share, ban_share, wr))
+        try:
+            g = {"game_id": gid, f"{side}_team_id": team, "started_at": now, "patch": patch, f"{side}_elo": elo}
+            pick_share, ban_share, wr, _ = self.st.champ_stats(patch)
+            picks = [self.index[c] for _, c in lineup if c in self.index]
+            return self.team_features(g, side, picks, (pick_share, ban_share, wr))
+        finally:
+            del self.roster[gid, team]
 
     def pmi(self, patch: str | None) -> Floats:
         return self.st.pmi(patch)
@@ -415,7 +422,7 @@ class Builder:
     def result(self) -> tuple[pl.DataFrame, ActionData]:
         actions = ActionData(
             vocab=self.vocab,
-            champ_roles=self.champ_roles,
+            role_rank=self.role_rank,
             team_x=np.stack(self.team_x),
             rows=pl.DataFrame(self.act_rows),
             unavailable=np.stack(self.unavailable),

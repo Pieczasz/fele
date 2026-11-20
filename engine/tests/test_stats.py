@@ -155,6 +155,10 @@ def test_player_champions_recency_and_pool_size():
     assert (ahri["n"], ahri["k"]) == (2, 1)
     assert ahri["recent_games"] == pytest.approx(0.5 + 0.5 ** (1 / 90))  # one game one half-life ago, one yesterday
     assert "Vex" not in pc["champion"].to_list()
+    # as_of=None: ages from each player's own latest game, so a league whose data ends earlier isn't decayed away
+    other = parts.with_columns(player_id=pl.lit("q"), started_at=pl.col("started_at") - timedelta(days=365))
+    both = pools.player_champions(pl.concat([parts, other])).filter(pl.col("champion") == "Vex")
+    assert both["recent_games"].to_list() == pytest.approx([0.5 ** (1 / 90)] * 2)  # each player's last game, 1 day
     value, lo, hi = pools.effective_pool(np.array([5.0, 5.0, 5.0, 5.0]), np.random.default_rng(0))
     assert value == pytest.approx(4.0)
     assert lo <= 4.0 <= hi

@@ -33,14 +33,36 @@ export class LoginRequiredError extends Error {
   }
 }
 
+export class HttpError extends Error {
+  readonly status: number
+  constructor(status: number, message: string) {
+    super(message)
+    this.name = 'HttpError'
+    this.status = status
+  }
+}
+
+/** FastAPI errors: `detail` is a string, or a list of validation errors ({loc, msg}) for a 422. */
+function errorMessage(body: unknown, res: Response): string {
+  const detail = (body as { detail?: unknown }).detail
+  if (typeof detail === 'string') {
+    return detail
+  }
+  if (Array.isArray(detail)) {
+    return detail
+      .map((d: { loc?: unknown[]; msg?: string }) => `${(d.loc ?? []).slice(1).join('.')}: ${d.msg}`)
+      .join('; ')
+  }
+  return `${res.status} ${res.statusText}`
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, init)
   if (res.status === 401) {
     throw new LoginRequiredError()
   }
   if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { detail?: string }
-    throw new Error(body.detail ?? `${res.status} ${res.statusText}`)
+    throw new HttpError(res.status, errorMessage(await res.json().catch(() => ({})), res))
   }
   return (res.status === 204 ? undefined : await res.json()) as T
 }

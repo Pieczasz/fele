@@ -7,7 +7,17 @@ import { ChampionGrid } from '../components/ChampionGrid.tsx'
 import { DraftBoard } from '../components/DraftBoard.tsx'
 import { Segmented } from '../components/Segmented.tsx'
 import { kind, split, TEMPLATE } from '../draftOrder.ts'
-import { lockedBy, type PlannedGame, useChampions, usePlan, usePrefs, weFirstNext } from '../hooks.ts'
+import {
+  lockedBy,
+  type PlannedGame,
+  playedGames,
+  useChampions,
+  usePlan,
+  usePrefs,
+  weBlueNext,
+  weFirstNext,
+} from '../hooks.ts'
+import { newId } from '../store.ts'
 
 const SIDES = [
   ['blue', 'We are blue'],
@@ -26,7 +36,11 @@ const MODES = [
 const OPTION_KEY = /^[1-5]$/u
 
 /** Keyboard shortcuts: '/' search, Backspace undo, S skip a ban, 1-5 take that option (or their likely pick). */
-function shortcut(key: string, slot: number, advice: DraftAdvice | undefined): 'search' | 'undo' | string | null {
+function shortcut(e: KeyboardEvent, slot: number, advice: DraftAdvice | undefined): 'search' | 'undo' | string | null {
+  const { key } = e
+  if (e.ctrlKey || e.metaKey || e.altKey) {
+    return null // leave browser shortcuts (Ctrl+S, Cmd+1, ...) alone
+  }
   if (key === '/') {
     return 'search'
   }
@@ -36,8 +50,8 @@ function shortcut(key: string, slot: number, advice: DraftAdvice | undefined): '
   if (key.toLowerCase() === 's' && kind(slot) === 'ban') {
     return ''
   }
-  if (!(OPTION_KEY.test(key) && advice)) {
-    return null
+  if (!(OPTION_KEY.test(key) && advice) || advice.next?.slot !== slot) {
+    return null // no advice for this slot yet (still loading): never act on the previous slot's list
   }
   const list = advice.next?.who === 'us' ? advice.options.map((o) => o.champion) : advice.likely.map((l) => l.champion)
   return list[Number(key) - 1] ?? null
@@ -54,19 +68,20 @@ export function DraftPage() {
   const champions = useChampions()
   const [prefs] = usePrefs()
   const [plan, setPlan] = usePlan()
-  const locked = lockedBy(plan)
-  const [side, setSide] = useState<'blue' | 'red'>(plan.weStartBlue ? 'blue' : 'red')
+  const locked = lockedBy(plan, champions.byName)
+  const [side, setSide] = useState<'blue' | 'red'>(weBlueNext(plan) ? 'blue' : 'red')
   const [first, setFirst] = useState<'us' | 'them'>(weFirstNext(plan) ? 'us' : 'them')
   const [mode, setMode] = useState<DraftRequest['mode']>('best')
   const [actions, setActions] = useState<string[]>([])
   const searchId = useId()
-  const gameNumber = plan.games.length + 1
+  const played = playedGames(plan)
+  const gameNumber = played.length + 1
   const us = prefs?.team ?? 'Cloud9 Kia'
   const opponent = teams.data?.find((t) => t.team_id === plan.opponent)
   const wePickFirst = first === 'us'
   const done = actions.length >= TEMPLATE.length
 
-  const score = plan.games.reduce((s, g) => s + (g.result === 'won' ? 1 : 0) - (g.result === 'lost' ? 1 : 0), 0)
+  const score = played.reduce((s, g) => s + (g.result === 'won' ? 1 : 0) - (g.result === 'lost' ? 1 : 0), 0)
   const body: DraftRequest = {
     us,
     them: plan.opponent,
@@ -77,6 +92,7 @@ export function DraftPage() {
     game_number: gameNumber,
     series_score: score,
     mode,
+    save: plan.save,
     preferences: prefs,
   }
   const advice = useQuery({
@@ -86,9 +102,12 @@ export function DraftPage() {
     placeholderData: keepPreviousData,
   })
 
-  const play = (c: string) => {
-    if (!done) {
-      setActions([...actions, c])
+  // guarded with the latest state: a double click or a stale option list can't add a champion twice or a 21st action
+  const append = (c: string) =>
+    setActions((a) => (a.length >= TEMPLATE.length || (c !== '' && (a.includes(c) || locked.has(c))) ? a : [...a, c]))
+  const takeOption = (c: string) => {
+    if (!advice.isFetching) {
+      append(c) // options belong to the slot they were computed for
     }
   }
   const undo = () => setActions(actions.slice(0, -1))
@@ -98,24 +117,24 @@ export function DraftPage() {
       if (isTyping(e.target)) {
         return
       }
-      const next = shortcut(e.key, actions.length, advice.data)
+      const next = shortcut(e, actions.length, advice.isFetching ? undefined : advice.data)
       if (next === 'search') {
         e.preventDefault()
         document.querySelector<HTMLInputElement>(`#${CSS.escape(searchId)}`)?.focus()
       } else if (next === 'undo') {
         setActions((a) => a.slice(0, -1))
       } else if (next !== null) {
-        setActions((a) => [...a, next])
+        append(next)
       }
     }
     globalThis.addEventListener('keydown', onKey)
     return () => globalThis.removeEventListener('keydown', onKey)
-  }, [searchId, actions.length, advice.data])
+  })
 
   const record = (result: PlannedGame['result']) => {
     const s = split(actions, wePickFirst)
     const game: PlannedGame = {
-      id: crypto.randomUUID(),
+      id: newId(),
       ours: s.us.pick,
       theirs: s.them.pick,
       bans: [...s.us.ban, ...s.them.ban].filter(Boolean),
@@ -123,7 +142,8 @@ export function DraftPage() {
     }
     setPlan({ ...plan, games: [...plan.games, game] })
     setActions([])
-    setFirst(result === 'lost' ? 'us' : 'them')
+    setFirst(result === 'lost' ? 'us' : 'them') // the loser takes first pick, the winner chooses blue (assumed)
+    setSide(result === 'won' ? 'blue' : 'red')
   }
 
   if (!plan.opponent) {
@@ -207,7 +227,7 @@ export function DraftPage() {
           champions={champions.list}
           taken={new Set(actions.filter(Boolean))}
           locked={locked}
-          onPick={play}
+          onPick={append}
           searchId={searchId}
         />
         <aside className="lg:sticky lg:top-4 lg:self-start">
@@ -216,7 +236,7 @@ export function DraftPage() {
               {advice.error.message}
             </p>
           ) : (
-            <AdvicePanel advice={advice.data} onPick={play} busy={advice.isFetching} />
+            <AdvicePanel advice={advice.data} onPick={takeOption} busy={advice.isFetching} />
           )}
         </aside>
       </div>

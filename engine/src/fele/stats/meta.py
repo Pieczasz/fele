@@ -74,7 +74,20 @@ def meta_scores(  # noqa: PLR0913 - one input per score component
         sq = with_shrunk(soloq.rename({"games": "n", "wins": "k"}), prior_by=("window",)).select(
             "window", "champion", soloq_n="n", soloq_wr="shrunk", soloq_wr_lo="shrunk_lo", soloq_wr_hi="shrunk_hi"
         )
-        out = out.join(sq, on=["window", "champion"], how="left")
+        # full join: champions with solo-queue games but no pro presence in the window still get a row
+        by_key = names.unique("champion", keep="first").select("champion", grid_k="grid", name_k="name")
+        out = (
+            out.join(sq, on=["window", "champion"], how="full", coalesce=True)
+            .join(by_key, on="champion", how="left")
+            .join(n_games.rename({"n": "games_k"}), on="window", how="left")
+            .with_columns(
+                pl.col("grid").fill_null(pl.col("grid_k")),
+                pl.col("name").fill_null(pl.col("name_k")),
+                pl.col("games").fill_null(pl.col("games_k")),
+                *(pl.col(c).fill_null(0) for c in ("k", "picks", "bans", "presence")),
+            )
+            .drop("grid_k", "name_k", "games_k")
+        )
     else:
         empty = ("soloq_n", "soloq_wr", "soloq_wr_lo", "soloq_wr_hi")
         out = out.with_columns(*(pl.lit(None, pl.Float64).alias(c) for c in empty))

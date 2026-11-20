@@ -103,6 +103,21 @@ Trained on all 633 development series, scored once on the latest 112 series (316
   frequencies go stale faster than the learned features), with top-10 at 64% vs 41%.
 - Cloud9 holdout games (65): Elo log loss 0.654, accuracy 63% — descriptive only.
 
+## Post-review fix (2026-11-20, after the holdout) — [`experiments/2026-11-20-action_ladder.md`](experiments/2026-11-20-action_ladder.md)
+
+A code review found that role assignment gave each pick its first tagged role in top→support order instead of its
+primary role (Wukong "jungle|top" became top), which distorted the draft model's role-fit features. Fixed
+(primary role first, every pick gets a role) and re-evaluated **walk-forward only**:
+
+| `action_lambdarank` | log loss | top-10 (all) | top-10 (picks) | MRR |
+|---|---|---|---|---|
+| before the fix | 3.242 | 68.6% | 66.1% | 0.316 |
+| after the fix | 3.149 | 71.1% | 70.0% | 0.326 |
+
+LambdaRank stays the best rung (conditional logit 70.2%, global baseline 50.7%), so the choice is unchanged. The
+holdout numbers above describe the pre-fix model; the holdout is spent and is not re-run, so the fixed model has no
+holdout figure. The model cards on the scouting page quote the walk-forward hit rate.
+
 ## Limits and what the models must not be used for
 
 - Probabilities are for draft prep and simulation, not betting; the outcome model is essentially an Elo model.

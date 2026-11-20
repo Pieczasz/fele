@@ -6,8 +6,8 @@ import numpy as np
 import polars as pl
 import pytest
 
-from fele.features.state import ActionData
-from fele.models.action import ConditionalLogit, LambdaRank, open_roles
+from fele.features.state import UNTAGGED, ActionData
+from fele.models.action import ConditionalLogit, LambdaRank, open_roles, role_assignment
 from fele.models.outcome import L3, OUTCOME_LADDER, PenalizedLogistic, tune
 
 
@@ -50,13 +50,22 @@ def test_conditional_logit_gradient_matches_finite_differences():
     assert np.abs(grad).max() < 0.05  # the optimum: gradient ~ 0
 
 
-def testopen_roles_greedy_assignment():
-    roles = np.array(
-        [[True, False, False, False, False], [True, True, False, False, False], [False, False, True, False, False]]
+def test_role_assignment_prefers_primary_role_and_always_assigns():
+    u = UNTAGGED
+    rank = np.array(
+        [
+            [0, u, u, u, u],  # top only
+            [1, 0, u, u, u],  # jungle first, top second (e.g. Wukong)
+            [u, u, 0, u, u],  # mid only
+            [0, u, u, u, u],  # top only: second top laner has no free tagged role
+        ],
+        np.int8,
     )
-    picks = np.array([[0, 1, -1, -1], [-1, -1, -1, -1]], np.int32)
-    free = open_roles(picks, roles)
-    assert free[0].tolist() == [False, False, True, True, True]  # 0 took top, 1 fell back to jungle
+    assert role_assignment([1, 0], rank) == [1, 0]  # Wukong goes jungle (primary), not top (first in role order)
+    assert role_assignment([0, 3], rank) == [0, 1]  # a pick with no free tagged role still gets a role
+    picks = np.array([[1, 0, -1, -1], [-1, -1, -1, -1]], np.int32)
+    free = open_roles(picks, rank)
+    assert free[0].tolist() == [False, False, True, True, True]
     assert free[1].all()
 
 
@@ -171,7 +180,7 @@ def _action_data(n_games: int = 60, v: int = 12) -> tuple[pl.DataFrame, ActionDa
     team_x[:, 3, 3] += 2.0  # champion 3 is this team's favourite pick
     act = ActionData(
         vocab=[f"c{i}" for i in range(v)],
-        champ_roles=np.eye(v, 5, dtype=bool),
+        role_rank=np.where(np.eye(v, 5, dtype=bool), 0, UNTAGGED).astype(np.int8),
         team_x=team_x,
         rows=pl.DataFrame(rows),
         unavailable=np.stack(unavailable),

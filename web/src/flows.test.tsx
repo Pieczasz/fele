@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, test as it, vi } from 'vitest'
 import { App } from './App.tsx'
@@ -32,7 +32,6 @@ const comp = {
   totals: {},
   scaling: 'mid',
   warnings: [],
-  contribution: {},
 }
 const ADVICE: DraftAdvice = {
   next: { slot: 1, who: 'us', kind: 'ban', phase: 'ban1' },
@@ -89,6 +88,7 @@ beforeEach(() => {
   localStorage.clear()
 })
 afterEach(() => {
+  cleanup() // no vitest globals, so testing-library can't unmount between tests by itself
   vi.unstubAllGlobals()
 })
 
@@ -114,6 +114,8 @@ it('mock draft: shows options with reasons, applies a click and the 1 key', asyn
   expect(screen.getByText('Our win probability 60%')).toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: 'Ahri' }))
   await waitFor(() => expect(calls.at(-1)?.body).toMatchObject({ actions: ['Ahri'], them: 'fq' }))
+  await waitFor(() => expect(document.querySelector('[aria-busy="false"]')).not.toBeNull()) // fresh advice
+  fireEvent.keyDown(globalThis.window, { key: '1', ctrlKey: true }) // browser shortcut: ignored
   fireEvent.keyDown(globalThis.window, { key: '1' })
   await waitFor(() => expect(calls.at(-1)?.body).toMatchObject({ actions: ['Ahri', 'Nocturne'] }))
   expect(screen.getByRole('button', { name: 'Ahri' })).toBeDisabled() // taken this game
@@ -140,4 +142,20 @@ it('coach inputs are edited in this browser only', async () => {
   const weight = await screen.findByRole('slider')
   fireEvent.change(weight, { target: { value: '0.8' } })
   await waitFor(() => expect(JSON.parse(localStorage.getItem('fele-prefs') ?? '{}').weight).toBe(0.8))
+})
+
+it('planner: a hand-entered game keeps slots in place and counts only once it has a result', async () => {
+  localStorage.setItem(
+    'fele-plan',
+    JSON.stringify({ opponent: 'fq', bestOf: 3, weStartBlue: true, games: [], save: {} }),
+  )
+  fakeApi()
+  renderAt('/planner')
+  fireEvent.click(await screen.findByRole('button', { name: '…or enter its picks by hand' }))
+  fireEvent.change(screen.getByRole('combobox', { name: 'Game 1, our pick 3' }), { target: { value: 'Azir' } })
+  const stored = () => JSON.parse(localStorage.getItem('fele-plan') ?? '{}').games[0]
+  await waitFor(() => expect(stored().ours).toEqual(['', '', 'Azir'])) // not packed into slot 1
+  expect(stored().result).toBeNull()
+  expect(screen.getByText('Score 0–0 · next: game 1')).toBeInTheDocument() // planned games don't count
+  expect(screen.getByText('Nothing locked yet.')).toBeInTheDocument()
 })

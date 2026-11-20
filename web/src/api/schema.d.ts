@@ -368,10 +368,6 @@ export interface components {
             scaling: string;
             /** Warnings */
             warnings: string[];
-            /** Contribution */
-            contribution: {
-                [key: string]: number;
-            };
         };
         /** Coverage */
         Coverage: {
@@ -435,6 +431,13 @@ export interface components {
              * @enum {string}
              */
             mode: "best" | "comfort_only" | "save";
+            /**
+             * Save
+             * @default {}
+             */
+            save: {
+                [key: string]: number;
+            };
             preferences?: components["schemas"]["Preferences"] | null;
         };
         /** DraftRow */
@@ -924,6 +927,8 @@ export interface components {
             locked: string[];
             /** We First Next */
             we_first_next?: boolean | null;
+            /** We Blue Next */
+            we_blue_next?: boolean | null;
             /**
              * Key Champions
              * @default []

@@ -38,7 +38,7 @@ export interface PlannedGame {
   ours: string[]
   theirs: string[]
   bans: string[]
-  result: 'won' | 'lost' | null
+  result: 'won' | 'lost' | null // null = planned, not played yet
 }
 
 export interface SeriesPlanState {
@@ -55,19 +55,37 @@ export function usePlan(): [SeriesPlanState, (p: SeriesPlanState) => void] {
   return useLocalState<SeriesPlanState>('fele-plan', EMPTY_PLAN)
 }
 
-/** Champion -> game number it was picked in (hard Fearless: unavailable for the rest of the series). */
-export function lockedBy(plan: SeriesPlanState): Map<string, number> {
+/** Games with a result. Planned games (result null) don't count toward the score, the locks or the game number. */
+export function playedGames(plan: SeriesPlanState): PlannedGame[] {
+  return plan.games.filter((g) => g.result !== null)
+}
+
+/**
+ * Champion -> game number it was picked in (hard Fearless: unavailable for the rest of the series), from played
+ * games only. `known` drops half-typed or misspelled names.
+ */
+export function lockedBy(plan: SeriesPlanState, known?: ReadonlyMap<string, unknown>): Map<string, number> {
   const out = new Map<string, number>()
-  plan.games.forEach((g, i) => {
+  playedGames(plan).forEach((g, i) => {
     for (const c of [...g.ours, ...g.theirs]) {
-      out.set(c, i + 1)
+      if (c && (!known || known.size === 0 || known.has(c))) {
+        out.set(c, i + 1)
+      }
     }
   })
   return out
 }
 
-/** Who picks first in the next game: game 1 as planned, then the loser of the previous game (assumed rule). */
+/**
+ * Side rule (2026 First Selection, assumed choices): game 1 as planned; afterwards the loser of the previous game
+ * takes first pick and the winner chooses blue side.
+ */
 export function weFirstNext(plan: SeriesPlanState): boolean {
-  const last = plan.games.at(-1)
+  const last = playedGames(plan).at(-1)
   return last === undefined ? plan.weStartBlue : last.result === 'lost'
+}
+
+export function weBlueNext(plan: SeriesPlanState): boolean {
+  const last = playedGames(plan).at(-1)
+  return last === undefined ? plan.weStartBlue : last.result === 'won'
 }

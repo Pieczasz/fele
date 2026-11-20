@@ -14,11 +14,13 @@ function ChampionList({
   values,
   onChange,
   listId,
+  known,
 }: {
   label: string
   values: string[]
   onChange: (v: string[]) => void
   listId: string
+  known: ReadonlyMap<string, unknown>
 }) {
   const [draft, setDraft] = useState('')
   return (
@@ -45,7 +47,7 @@ function ChampionList({
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === 'Enter' && draft && !values.includes(draft)) {
+          if (e.key === 'Enter' && known.has(draft) && !values.includes(draft)) {
             onChange([...values, draft])
             setDraft('')
           }
@@ -61,10 +63,12 @@ function PlayerEditor({
   player,
   onChange,
   listId,
+  known,
 }: {
   player: PlayerPrefs
   onChange: (p: PlayerPrefs) => void
   listId: string
+  known: ReadonlyMap<string, unknown>
 }) {
   const pool = player.pool ?? []
   const [champion, setChampion] = useState('')
@@ -145,7 +149,7 @@ function PlayerEditor({
         />
         <button
           type="button"
-          disabled={!champion || pool.some((c) => c.champion === champion)}
+          disabled={!known.has(champion) || pool.some((c) => c.champion === champion)}
           onClick={() => {
             onChange({ ...player, pool: [...pool, { champion, comfort: 'comfortable', note: '' }] })
             setChampion('')
@@ -160,6 +164,7 @@ function PlayerEditor({
         values={player.hates_playing_against ?? []}
         onChange={(v) => onChange({ ...player, hates_playing_against: v })}
         listId={listId}
+        known={known}
       />
     </article>
   )
@@ -251,6 +256,7 @@ export function CoachPage() {
             key={p.name}
             player={p}
             listId={listId}
+            known={champions.byName}
             onChange={(next) => setPrefs({ ...prefs, players: prefs.players.map((x, j) => (j === i ? next : x)) })}
           />
         ))}
@@ -262,12 +268,14 @@ export function CoachPage() {
             values={strategy.save_for_late_games ?? []}
             onChange={(v) => setStrategy({ save_for_late_games: v })}
             listId={listId}
+            known={champions.byName}
           />
           <ChampionList
             label="Never pick"
             values={strategy.never_pick ?? []}
             onChange={(v) => setStrategy({ never_pick: v })}
             listId={listId}
+            known={champions.byName}
           />
         </div>
         <div className="mt-4 space-y-2 text-sm">
@@ -279,6 +287,7 @@ export function CoachPage() {
               values={champs}
               onChange={(v) => setStrategy({ must_ban_vs_opponent: { ...mustBan, [team]: v } })}
               listId={listId}
+              known={champions.byName}
             />
           ))}
           <div className="flex gap-2">

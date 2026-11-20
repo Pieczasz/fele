@@ -15,18 +15,27 @@ OVERLAP_MIN_GAMES = 2
 BOOTSTRAP = 400
 
 
-def player_champions(parts: pl.DataFrame, as_of: datetime, half_life_days: float = HALF_LIFE_DAYS) -> pl.DataFrame:
+def player_champions(
+    parts: pl.DataFrame, as_of: datetime | None = None, half_life_days: float = HALF_LIFE_DAYS
+) -> pl.DataFrame:
     """Player × champion (games strictly before `as_of`): games, wins, shrunk win rate, recency-weighted games, comfort.
+
+    as_of=None: every game, with ages counted from each player's own latest game (leagues' data end on different
+    dates; a dataset-wide anchor would make whole leagues look inactive).
 
     recent_games = Σ 0.5^(age_days / half_life) — a game today counts 1, one half-life ago 0.5.
     comfort = recent_games × shrunk_win_rate / 0.5: recency-weighted games, scaled up or down by how well it went.
     The win-rate prior is fitted per role over all player-champion pairs.
     """
-    past = parts.filter(pl.col("started_at") < as_of)
+    if as_of is None:
+        past, anchor = parts, pl.col("started_at").max().over("player_id") + pl.duration(days=1)
+    else:
+        past, anchor = parts.filter(pl.col("started_at") < as_of), pl.lit(as_of)
     role = past.group_by("player_id").agg(role=pl.col("inferred_role").drop_nulls().mode().sort().first())
-    age = (pl.lit(as_of) - pl.col("started_at")).dt.total_seconds() / 86400
+    age = pl.col("age_days")
     pc = (
-        past.group_by("player_id", "champion")
+        past.with_columns(age_days=(anchor - pl.col("started_at")).dt.total_seconds() / 86400)
+        .group_by("player_id", "champion")
         .agg(
             n=pl.len(),
             k=pl.col("win").sum(),

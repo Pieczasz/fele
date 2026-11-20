@@ -318,7 +318,7 @@ def explain() -> None:
 
 @app.command()
 def backtest() -> None:
-    """Recommender back-test on the holdout drafts -> docs/experiments/<date>-backtest.md."""
+    """Recommender back-test on the last development months -> docs/experiments/<date>-backtest.md."""
     from fele.eval import backtest as bt
     from fele.eval import run
 

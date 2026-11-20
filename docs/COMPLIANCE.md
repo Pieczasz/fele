@@ -67,3 +67,5 @@ Send via Cloud9 Discord office hours (discord.gg/cloud9) or the Devpost "Email t
    pending (2026-11-19). Meanwhile the dev key in `.env` is regenerated daily.
 4. Optionally register for Riot Games Open Access (riot.grid.gg) and read its terms.
 5. Create a Leaguepedia bot password only if we decide to use the Cargo API directly.
+6. After judging ends (2027-02-03): delete the hosted demo's model artifacts and aggregates, and `data_local/models/`
+   locally (GRID licence: no ML model that outlives the hackathon).

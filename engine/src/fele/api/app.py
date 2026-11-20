@@ -286,7 +286,16 @@ def _draft_cards(team_id: str) -> list[models.Card]:
 
 def _player_cards(team_id: str) -> list[models.Card]:
     cards: list[models.Card] = []
-    targets = table("stats_ban_targets").filter(pl.col("team_id") == team_id, pl.col("period") == "all")
+    try:
+        pool = players(team_id).players
+    except HTTPException:
+        pool = []
+    current = [p for p in pool if p.current]
+    targets = table("stats_ban_targets").filter(
+        pl.col("team_id") == team_id,
+        pl.col("period") == "all",
+        pl.col("target_player").is_in([p.name for p in current]),  # players who left don't get a card
+    )
     for r in targets.sort("k", descending=True).head(1).iter_rows(named=True):
         champs = [c["champion"] for c in r["champions"][:3]]
         cards.append(
@@ -300,13 +309,9 @@ def _player_cards(team_id: str) -> list[models.Card]:
                 champions=champs,
             )
         )
-    try:
-        pool = players(team_id).players
-    except HTTPException:
-        return cards
-    current = [p for p in pool if p.current and p.n >= 20]  # noqa: PLR2004
-    if current:
-        thin = min(current, key=lambda p: p.effective_pool)
+    regulars = [p for p in current if p.n >= 20]  # noqa: PLR2004
+    if regulars:
+        thin = min(regulars, key=lambda p: p.effective_pool)
         top = [c.champion for c in thin.champions[:3]]
         cards.append(
             models.Card(
@@ -324,7 +329,11 @@ def _player_cards(team_id: str) -> list[models.Card]:
 
 def _macro_cards(team_id: str) -> list[models.Card]:
     rates = table("stats_macro_rates").filter(
-        pl.col("team_id") == team_id, pl.col("period") == "all", pl.col("split") == "all", pl.col("tendency") != "noise"
+        pl.col("team_id") == team_id,
+        pl.col("period") == "all",
+        pl.col("split") == "all",
+        pl.col("tendency") != "noise",
+        pl.col("rate") > pl.col("base_rate"),  # the card texts describe doing it MORE than the league
     )
     cards: list[models.Card] = []
     for r in rates.sort("p").head(3).iter_rows(named=True):
@@ -367,7 +376,7 @@ def _model_cards(team_id: str) -> list[models.Card]:
                 kind="model",
                 title=f"Their likeliest {what} vs {us}",
                 detail=", ".join(f"{live.vocab[i]} {probs[i]:.0%}" for i in top) + ". Draft-model estimate; the actual "
-                "pick or ban was in its top 10 64% of the time on the holdout.",
+                "pick or ban was in its top 10 71% of the time (walk-forward).",
                 evidence="model (LambdaRank)",
                 strength="model",
                 champions=names,
@@ -452,7 +461,6 @@ def coverage() -> models.Coverage:
 
 
 # --- draft engine (Phase 9) -------------------------------------------------------------------------------------
-MAX_SIMS = 500
 
 
 def _key_map() -> dict[str, str]:
@@ -491,7 +499,7 @@ def draft_recommend(req: models.DraftRequest) -> models.DraftAdvice:
         raise HTTPException(422, str(e)) from e
     prefs_ = req.preferences or prefs.load()
     team_name = live.team_names.get(m.them, req.them)
-    options = recommend.recommend(m, s, prefs_, req.mode, enemy_name=team_name)
+    options = recommend.recommend(m, s, prefs_, req.mode, enemy_name=team_name, save=req.save)
     likely: list[models.Likely] = []
     if not s.complete and s.who(s.slot) == THEM:
         probs = recommend.action_probs(m, [s])[0]
@@ -529,8 +537,8 @@ def draft_recommend(req: models.DraftRequest) -> models.DraftAdvice:
         ],
         likely=likely,
         win_prob=models.WinProb(mean=mean, p10=p10, p90=p90),
-        our_comp=comp_out(comp.analyze(m, s.picks(US), s.picks(THEM))),
-        their_comp=comp_out(comp.analyze(m, s.picks(THEM), s.picks(US))),
+        our_comp=comp_out(comp.analyze(live, s.picks(US))),
+        their_comp=comp_out(comp.analyze(live, s.picks(THEM))),
     )
 
 
@@ -540,7 +548,7 @@ def series_simulate(req: models.SeriesRequest) -> models.SeriesPlan:
     from fele.engine.live import get_live  # noqa: PLC0415
 
     live = get_live()
-    sims = max(20, min(req.sims, MAX_SIMS))
+    sims = req.sims
     prefs_ = req.preferences or prefs.load()
     start = series.SeriesStart(
         game=req.start_game,
@@ -548,6 +556,7 @@ def series_simulate(req: models.SeriesRequest) -> models.SeriesPlan:
         losses=req.losses,
         locked=frozenset(req.locked),
         we_first=req.we_start_blue if req.we_first_next is None else req.we_first_next,
+        we_blue=req.we_blue_next,
     )
 
     def run(save: dict[str, int]) -> series.SeriesResult:

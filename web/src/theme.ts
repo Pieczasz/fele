@@ -3,7 +3,7 @@ export type Theme = 'light' | 'dark'
 
 const KEY = 'fele-theme'
 
-export function storedTheme(): Theme | null {
+function storedTheme(): Theme | null {
   try {
     const v = localStorage.getItem(KEY)
     return v === 'light' || v === 'dark' ? v : null

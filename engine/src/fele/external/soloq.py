@@ -92,6 +92,11 @@ def participant_rows(m: JsonObj, platform: str, builds: dict[int, list[int]] | N
     ]
 
 
+def _remake(m: JsonObj) -> bool:
+    """A remake (early surrender in the first minutes) says nothing about champion strength."""
+    return any(p.get("gameEndedInEarlySurrender") for p in m["info"].get("participants", []))
+
+
 def wants_timeline(match_id: str, share: float) -> bool:
     """Deterministic per match, so re-runs pick the same (already cached) timelines."""
     return int(hashlib.sha256(match_id.encode()).hexdigest()[:8], 16) / 0xFFFFFFFF < share
@@ -150,7 +155,9 @@ async def sample(
             seen.update(new)
             matches = await asyncio.gather(*(rc.match(region, i) for i in new))
             ranked = [
-                (i, m) for i, m in zip(new, matches, strict=True) if m and m["info"].get("queueId") == RANKED_SOLO_QUEUE
+                (i, m)
+                for i, m in zip(new, matches, strict=True)
+                if m and m["info"].get("queueId") == RANKED_SOLO_QUEUE and not _remake(m)
             ]
             wanted = [i for i, _ in ranked if wants_timeline(i, timeline_share)]
             timelines = dict(zip(wanted, await asyncio.gather(*(rc.timeline(region, i) for i in wanted)), strict=True))

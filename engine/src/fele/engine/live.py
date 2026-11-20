@@ -6,9 +6,9 @@ The cache (data_local/models/live.pkl) is our own file, rebuilt whenever an inpu
 """
 
 import pickle
+import threading
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from functools import cache
 from pathlib import Path
 
 import numpy as np
@@ -26,7 +26,7 @@ from fele.stats.data import game_context
 
 type Floats = npt.NDArray[np.float32]
 
-CACHE_VERSION = 2  # bump when the pickled classes change (the file name carries it)
+CACHE_VERSION = 3  # bump when the pickled classes change (the file name carries it)
 POSITION = {"top": "TOP", "jungle": "JUNGLE", "mid": "MIDDLE", "bot": "BOTTOM", "support": "UTILITY"}
 MATCHUP_PRIOR = 20.0  # pseudo-games shrinking solo-queue lane matchups toward 50%
 STYLE_HALF_LIFE_DAYS = 120.0
@@ -48,18 +48,26 @@ class Live:
     team_names: dict[str, str]
     lineups: dict[str, list[Player]]  # team -> players of its latest game
     patch: str | None
-    now: datetime
+    now: datetime  # a day after the latest game in the data
+    last_game: dict[str, datetime]  # team -> its latest game
     tags: dict[str, dict[str, float]]  # GRID champion -> tag values
     style: dict[str, Floats]  # team -> recency-weighted mean tags of its picks
     matchups: dict[tuple[str, str, str], tuple[int, int]]  # (role, champion, opponent) -> (games, wins)
+
+    def now_for(self, team: str) -> datetime:
+        """ "Now" for a team's recency weights: a day after its own latest game. Leagues' data end on different dates;
+        anchoring every team to the dataset's last game would decay a whole league's pools toward zero."""
+        last = self.last_game.get(team)
+        return self.now if last is None else last + timedelta(days=1)
 
     @property
     def vocab(self) -> list[str]:
         return self.builder.vocab
 
     @property
-    def roles(self) -> npt.NDArray[np.bool_]:
-        return self.builder.champ_roles
+    def roles(self) -> npt.NDArray[np.int8]:
+        """role_rank (V x 5): 0 = primary role, state.UNTAGGED = not tagged."""
+        return self.builder.role_rank
 
     def team_id(self, name_or_id: str) -> str:
         if name_or_id in self.team_names:
@@ -167,6 +175,13 @@ def build_live() -> Live:
         lineups=_lineups(inp),
         patch=patches[-1] if patches else None,
         now=now,
+        last_game=dict(
+            game_context(inp.games, inp.series)
+            .unpivot(["blue_team_id", "red_team_id"], index="started_at", value_name="team_id")
+            .group_by("team_id")
+            .agg(pl.col("started_at").max())
+            .iter_rows()
+        ),
         tags=tags,
         style=_style(inp, tags, now),
         matchups=soloq_matchups(inp.cmap, inp.champions),
@@ -176,7 +191,7 @@ def build_live() -> Live:
 def _stamps() -> list[tuple[str, int]]:
     """(file name, modification time in ns) of every input of the live context."""
     root = settings().local()
-    patterns = ("parquet/*.parquet", "static/*.parquet", "aggregates/soloq_*.parquet")
+    patterns = ("parquet/*.parquet", "static/*.parquet", "aggregates/soloq_*.parquet", "aggregates/stats_teams.parquet")
     return [(f.name, f.stat().st_mtime_ns) for pattern in patterns for f in sorted(root.glob(pattern))]
 
 
@@ -188,16 +203,31 @@ def _cache_path() -> Path:
     return settings().local("models") / f"live-v{CACHE_VERSION}.pkl"
 
 
-@cache
-def _load(key: tuple[object, ...]) -> Live:
-    path = _cache_path()
-    if path.exists():
+_lock = threading.Lock()
+_current: list[tuple[tuple[object, ...], Live]] = []  # at most one (key, live): older contexts are released
+
+
+def _from_disk(path: Path, key: tuple[object, ...]) -> Live | None:
+    try:
         stored_key, live = pickle.loads(path.read_bytes())  # noqa: S301 - our own cache file
-        if stored_key == key:
-            return live
-    live = build_live()
-    path.write_bytes(pickle.dumps((key, live)))
-    return live
+    except OSError, pickle.UnpicklingError, EOFError, AttributeError, ImportError, ValueError:
+        return None  # missing, truncated or from older code: rebuild
+    return live if stored_key == key else None
+
+
+def _load(key: tuple[object, ...]) -> Live:
+    with _lock:  # one build at a time; concurrent requests wait for it instead of each building their own
+        if _current and _current[0][0] == key:
+            return _current[0][1]
+        path = _cache_path()
+        live = _from_disk(path, key)
+        if live is None:
+            live = build_live()
+            tmp = path.with_suffix(".tmp")
+            tmp.write_bytes(pickle.dumps((key, live)))
+            tmp.replace(path)  # atomic: a crash mid-write never leaves a broken cache behind
+        _current[:] = [(key, live)]
+        return live
 
 
 def live_ready() -> bool:

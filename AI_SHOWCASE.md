@@ -238,3 +238,31 @@ One entry per phase of [AGENT_PLAN.md](AGENT_PLAN.md): what was asked, what the 
   - Ban slots truncated champion names to "N..". They now show the icon only, with the name for screen readers and
     as a tooltip.
 - **Human corrections:** _(fill in at checkpoint: approve the video flow)_
+
+### Quality pass: static analysis and a max-effort code review (2026-11-20)
+
+- **Asked:** "run static analysis tools, dead code analysis, few code reviews or just one max thinking code review so
+  that we know everything is correct safe and secure and that we adhere to the rules of the hackathon".
+- **Static tools:** ruff, Pyright, Biome and tsc were already clean. pip-audit and pnpm audit found no known
+  vulnerabilities. bandit's findings were false positives: escaped local DuckDB paths, and our own pickle cache.
+  vulture found a mangled test name; knip found an unused dependency (`recharts`).
+- **Code review:** 12 finder agents and 14 verifiers, with every finding checked against the real code and data.
+  15 confirmed bugs plus about 25 smaller ones, all fixed except a few with negligible effect (listed in the commit).
+  The ones that mattered:
+  - roles: picks took their first role in top→support order, not their primary role, so Wukong became a top laner.
+    After the fix the draft model improves on the walk-forward folds (top-10 68.6% → 71.1%);
+  - "Respect save list" penalised saved champions in games 3+, the games they were saved for;
+  - macro cards advised the opposite of the data for 20 of 28 teams;
+  - the "recent" window was empty for 33 of 45 teams, because it was anchored to the dataset's last game rather than
+    each team's;
+  - the back-test skipped picks it couldn't offer, which inflated it, and it ran on holdout drafts. It now runs on
+    development months, and the holdout is not reused;
+  - planner typing packed each keystroke into separate slots, so "Azir" became the locks A, z, ir;
+  - a double click could add a champion twice;
+  - planned games counted as wins;
+  - smaller items: an unbounded simulation request, a truncated cache breaking every draft endpoint, two concurrent
+    requests sharing a lineup, a non-ASCII cookie giving a 500.
+- **Rules check:** no Elo ranking is shown; recommendations stay ranked options with reasons; the Riot disclaimer is
+  present; solo-queue pools are off by default; no data or models are in git. Added a to-do to delete model artifacts
+  after judging (GRID licence).
+- **Human corrections:** _(none yet)_
