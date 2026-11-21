@@ -36,6 +36,8 @@ Every number shows its sample size, and every recommendation is a ranked option 
    queue. On your turn you get five ranked bans or picks, each with its reasons: live-patch high-elo strength at your
    position, your own recent games on it, the lane matchup against the enemy pick, and what the comp lacks. Names and
    stats only for you and your party; other teammates show as "Ally", and the enemy team is never looked up.
+   In scrims (custom tournament draft, the same pro order), the mock draft board can **follow the League client**:
+   the draft fills itself in while the pro recommender and the opponent model run on it.
 
 | Page | Answers |
 |---|---|
@@ -135,7 +137,7 @@ cd web && pnpm dev                 # http://localhost:5173
 | `explain` / `holdout` | Coefficients, SHAP and posterior summaries of the Phase 8 models; the one-time final holdout check |
 | `db` | Builds `data_local/fele.duckdb`: views `grid.*`, `lol.*`, `static.*`, `leaguepedia.*`, `soloq.*`, `aggregates.*` |
 | `serve` | API with Swagger UI at `/docs`, ReDoc at `/redoc`, OpenAPI spec at `/openapi.json`; `--lcu` also follows the local League client (fele Live) |
-| `lcu-fake` | A scripted fake League client (lobby → Ranked Flex champ select, looping) to try fele Live without the game |
+| `lcu-fake` | A scripted fake League client (lobby → Ranked Flex champ select, looping; `--scrim`: a custom tournament draft) to try fele Live without the game |
 | `lcu-capture` | Records anonymised League client payloads to `data_local/lcu_captures/` (parser checks) |
 | `eval-solo` | Champ-select scorer check on the cached high-elo matches → `docs/experiments/<date>-solo.md` |
 

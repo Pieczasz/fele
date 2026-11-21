@@ -419,7 +419,8 @@ engine end to end. Waiting on the human: hosting choice and the organizer questi
 (COMPLIANCE §4), screenshots (they show GRID-derived numbers), recording the video.
 
 **2026-11-21: scope extended by the human** (plan: fele Live via the League client, UX pass, E2E tests, AI features;
-details in docs/COMPLIANCE.md and AI_SHOWCASE.md). Milestone 1 (fele Live for the user's own champ select) done.
+details in docs/COMPLIANCE.md and AI_SHOWCASE.md). Milestone 1 (fele Live for the user's own champ select) done; Milestone 2 (UX pass, Playwright E2E + axe in CI) done;
+scrim mode (the mock board follows a custom tournament draft) done, scrim log still open.
 
 **🛑 Checkpoint:** human submits on Devpost by 2027-01-09.
 

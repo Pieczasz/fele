@@ -347,14 +347,16 @@ def live() -> None:
 
 
 @app.command()
-def lcu_fake(lockfile: Path = Path("data_local/fake-lockfile")) -> None:
-    """Run a scripted fake League client (lobby -> Ranked Flex champ select, looping) for demos and E2E tests."""
+def lcu_fake(lockfile: Path = Path("data_local/fake-lockfile"), scrim: bool = False) -> None:
+    """Run a scripted fake League client (lobby -> Ranked Flex champ select, looping) for demos and tests.
+
+    --scrim: a custom tournament draft in pro order instead (the mock draft board can follow it)."""
     import time
 
     from fele.lcu.fake import serve as serve_fake
 
     lockfile.parent.mkdir(parents=True, exist_ok=True)
-    server = serve_fake(lockfile.resolve())
+    server = serve_fake(lockfile.resolve(), scrim=scrim)
     typer.echo(f"fake League client on 127.0.0.1:{server.server_port}; lockfile {lockfile.resolve()}")
     typer.echo(f"now run: FELE_LCU_LOCKFILE={lockfile.resolve()} uv run fele serve --lcu   (Ctrl-C to stop)")
     try:

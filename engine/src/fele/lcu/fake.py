@@ -108,13 +108,59 @@ def session_at(t: float) -> dict[str, Any]:
     }
 
 
+# a scrim: custom tournament draft, one action per turn in pro order; we are blue and pick first
+SCRIM_CHAMPS = (
+    (157, 64, 777, 103, 238, 81),  # bans 1-6 (ABABAB)
+    (61, 266, 121, 234, 222, 498),  # picks 7-12 (ABBAAB)
+    (91, 360, 245, 555),  # bans 13-16 (BABA)
+    (412, 86, 89, 4),  # picks 17-20 (BAAB)
+)
+
+
+def scrim_session_at(t: float) -> dict[str, Any]:
+    """Custom tournament draft `t` seconds in: the pro order, so fele's mock board can follow it."""
+    order = [
+        (kind, team)
+        for kind, teams in (("ban", "ABABAB"), ("pick", "ABBAAB"), ("ban", "BABA"), ("pick", "BAAB"))
+        for team in teams
+    ]
+    champs = [c for group in SCRIM_CHAMPS for c in group]
+    step = int(t // STEP_S)
+    used = {"A": 0, "B": 0}
+    actions: list[list[dict[str, Any]]] = []
+    for i, (kind, team) in enumerate(order):
+        cell = used[team] % 5 + (0 if team == "A" else 5)
+        used[team] += 1
+        actions.append(
+            [
+                {
+                    "id": i,
+                    "actorCellId": cell,
+                    "type": kind,
+                    "isAllyAction": team == "A",
+                    "championId": champs[i] if step > i else 0,
+                    "completed": step > i,
+                    "isInProgress": step == i,
+                }
+            ]
+        )
+    return {
+        "localPlayerCellId": 2,
+        "isCustomGame": True,
+        "myTeam": [{"cellId": c, "assignedPosition": "", "puuid": f"scrim-{c}"} for c in range(5)],
+        "theirTeam": [{"cellId": c} for c in range(5, 10)],
+        "actions": actions,
+        "timer": {"phase": "BAN_PICK" if step < len(order) else "FINALIZATION", "adjustedTimeLeftInPhase": 20_000},
+    }
+
+
 class FakeClient:
-    def __init__(self, loop: bool = True) -> None:  # noqa: FBT001, FBT002
+    def __init__(self, *, loop: bool = True, scrim: bool = False) -> None:
         self.started = time.monotonic()
-        self.loop = loop
+        self.loop, self.scrim = loop, scrim
 
     def elapsed(self) -> float:
-        cycle = LOBBY_S + STEP_S * (len(PICK_ORDER) + 3)
+        cycle = LOBBY_S + STEP_S * (22 if self.scrim else len(PICK_ORDER) + 3)
         t = time.monotonic() - self.started
         return t % cycle if self.loop else t
 
@@ -123,7 +169,9 @@ class FakeClient:
         in_cs = t >= LOBBY_S
         routes: dict[str, Any] = {
             "/lol-gameflow/v1/gameflow-phase": "ChampSelect" if in_cs else "Lobby",
-            "/lol-gameflow/v1/session": {"gameData": {"queue": {"id": 440}, "isCustomGame": False}},
+            "/lol-gameflow/v1/session": {
+                "gameData": {"queue": {"id": 0 if self.scrim else 440}, "isCustomGame": self.scrim}
+            },
             "/lol-summoner/v1/current-summoner": {"puuid": ME, "gameName": "Me", "tagLine": "EUW"},
             "/lol-lobby/v2/lobby": {
                 "members": [
@@ -133,15 +181,15 @@ class FakeClient:
             },
         }
         if in_cs:
-            routes["/lol-champ-select/v1/session"] = session_at(t - LOBBY_S)
+            routes["/lol-champ-select/v1/session"] = (scrim_session_at if self.scrim else session_at)(t - LOBBY_S)
         for puuid, games in HISTORY.items():
             routes[f"/lol-match-history/v1/products/lol/{puuid}/matches"] = {"games": {"games": games}}
         return routes.get(path)
 
 
-def serve(lockfile: Path, port: int = 0, *, loop: bool = True) -> ThreadingHTTPServer:
+def serve(lockfile: Path, port: int = 0, *, loop: bool = True, scrim: bool = False) -> ThreadingHTTPServer:
     """Start the fake client in a background thread and write its lockfile. Returns the server (call shutdown())."""
-    fake = FakeClient(loop)
+    fake = FakeClient(loop=loop, scrim=scrim)
     password = secrets.token_urlsafe(12)
 
     class Handler(BaseHTTPRequestHandler):

@@ -494,3 +494,25 @@ def test_captures_are_anonymised_consistently():
     assert out["myTeam"][0]["championId"] == 103
     assert "abc" not in str(out)
     assert "Real" not in str(out)
+
+
+# --- scrims: tournament draft in pro order --------------------------------------------------------------------------
+def test_tournament_draft_maps_to_the_pro_board():
+    from fele.lcu import fake  # noqa: PLC0415
+
+    def cs(t: float) -> state.ChampSelect:
+        return state.parse_session(payloads.Session.model_validate(fake.scrim_session_at(t)), set(), 0)
+
+    early = state.pro_order(cs(fake.STEP_S * 3 + 0.5))
+    assert early is not None
+    assert early.we_pick_first
+    assert early.we_are_blue
+    assert early.actions == (157, 64, 777)
+    done = state.pro_order(cs(fake.STEP_S * 25))
+    assert done is not None
+    assert len(done.actions) == 20
+    assert state.pro_order(_cs()) is None  # solo queue's simultaneous bans are not the pro order
+    data = _data()
+    full = view.champ_select(data, cs(fake.STEP_S * 25), Watcher(find=lambda: None))
+    assert full.pro_draft is not None
+    assert len(full.pro_draft.actions) == 20

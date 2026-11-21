@@ -54,3 +54,14 @@ it('fele Live shows champ select with party names and options', async ({ page })
   await expect(page.getByText('Friend', { exact: true })).toBeVisible()
   await expect(page.getByText('56% adj. win rate at mid in 120 high-elo games (16.22–16.23)')).toBeVisible()
 })
+
+it('no sideways scrolling on any main page', async ({ page }) => {
+  for (const path of ['/', '/planner', '/draft', '/live', '/coach']) {
+    await page.goto(path)
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    )
+    expect(overflow, path).toBeLessThanOrEqual(0)
+  }
+})

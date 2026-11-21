@@ -10,7 +10,7 @@ from fele.api import models
 from fele.engine.recommend import Option
 from fele.engine.solo import SoloData, ban_options, pick_options
 from fele.lcu.history import Pool
-from fele.lcu.state import ChampSelect
+from fele.lcu.state import ChampSelect, pro_order
 from fele.lcu.watch import Snapshot, Watcher
 
 POOL_SHOWN = 5
@@ -91,6 +91,17 @@ def _name(cs: ChampSelect, cell: int) -> str | None:
     return "you" if ally.me else ally.name
 
 
+def _pro(data: SoloData, cs: ChampSelect) -> models.ProDraft | None:
+    order = pro_order(cs)
+    if order is None:
+        return None
+    return models.ProDraft(
+        actions=[data.names.get(c, str(c)) if c else "" for c in order.actions],  # unknown id: the API says so
+        we_pick_first=order.we_pick_first,
+        we_are_blue=order.we_are_blue,
+    )
+
+
 def champ_select(data: SoloData, cs: ChampSelect, watcher: Watcher) -> models.LiveChampSelect:
     allies: list[models.LiveAlly] = []
     for a in cs.allies:
@@ -117,6 +128,7 @@ def champ_select(data: SoloData, cs: ChampSelect, watcher: Watcher) -> models.Li
         enemy_picks=_refs(data, cs.enemy_picks),
         ally_bans=_refs(data, cs.ally_bans),
         enemy_bans=_refs(data, cs.enemy_bans),
+        pro_draft=_pro(data, cs),
         actions=[
             models.LiveAction(
                 cell=a.cell,

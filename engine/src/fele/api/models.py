@@ -345,6 +345,14 @@ class LiveAction(BaseModel):
     in_progress: bool
 
 
+class ProDraft(BaseModel):
+    """The champ select in pro order (custom tournament draft: scrims), ready for the mock draft board."""
+
+    actions: list[str]  # champion names in pro draft order, "" = skipped ban
+    we_pick_first: bool
+    we_are_blue: bool
+
+
 class LiveChampSelect(BaseModel):
     queue: int
     queue_name: str
@@ -356,6 +364,7 @@ class LiveChampSelect(BaseModel):
     ally_bans: list[ChampRef]
     enemy_bans: list[ChampRef]
     actions: list[LiveAction]
+    pro_draft: ProDraft | None
 
 
 class LiveAdvice(BaseModel):

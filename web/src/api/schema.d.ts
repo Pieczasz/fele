@@ -651,6 +651,7 @@ export interface components {
             enemy_bans: components["schemas"]["ChampRef"][];
             /** Actions */
             actions: components["schemas"]["LiveAction"][];
+            pro_draft: components["schemas"]["ProDraft"] | null;
         };
         /** LiveState */
         LiveState: {
@@ -935,6 +936,18 @@ export interface components {
              * @default 0.5
              */
             weight: number;
+        };
+        /**
+         * ProDraft
+         * @description The champ select in pro order (custom tournament draft: scrims), ready for the mock draft board.
+         */
+        ProDraft: {
+            /** Actions */
+            actions: string[];
+            /** We Pick First */
+            we_pick_first: boolean;
+            /** We Are Blue */
+            we_are_blue: boolean;
         };
         /**
          * Rate

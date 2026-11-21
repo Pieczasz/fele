@@ -25,6 +25,7 @@ const PREFS: Preferences = {
   strategy: { save_for_late_games: [], must_ban_vs_opponent: {}, never_pick: [], style_tags: [] },
 }
 const AHRI = /^(?:Ban |Pick )?Ahri(?::.*)?$/u // the grid tile, whatever its state
+const FOLLOWING = /The board follows the League client/u
 const DECIDED = /The series is already decided \(2–0\)/u
 const CHAMPS = ['Ahri', 'Azir', 'Vi', 'Jinx', 'Nocturne'].map((name) => ({ name, key: name, roles: ['mid'] }))
 const comp = {
@@ -54,9 +55,10 @@ const ADVICE: DraftAdvice = {
   their_comp: comp,
 }
 
-function fakeApi() {
+function fakeApi(extra: Record<string, unknown> = {}) {
   const calls: { path: string; body?: unknown }[] = []
   const routes: Record<string, unknown> = {
+    ...extra,
     '/teams': [TEAM],
     '/info': { ddragon_version: '16.23.1', live_patch: '16.23', demo_protected: false },
     '/preferences': PREFS,
@@ -233,4 +235,42 @@ it('planner: a typed nickname snaps to the champion, an unknown name is flagged'
   fireEvent.change(second, { target: { value: 'Nobody' } })
   expect(second).toHaveAttribute('aria-invalid', 'true')
   expect(screen.getByText('Unknown champion: not counted as locked')).toBeInTheDocument()
+})
+
+it('mock draft: follows a custom tournament draft from the League client (scrims)', async () => {
+  localStorage.setItem(
+    'fele-plan',
+    JSON.stringify({ opponent: 'fq', bestOf: 3, weStartBlue: true, games: [], save: {} }),
+  )
+  const live = {
+    enabled: true,
+    connected: true,
+    phase: 'ChampSelect',
+    me: null,
+    party: [],
+    sample: '',
+    version: 1,
+    advice: null,
+    champ_select: {
+      queue: 0,
+      queue_name: 'Custom game',
+      custom: true,
+      phase: 'BAN_PICK',
+      time_left_s: 20,
+      allies: [],
+      enemy_picks: [],
+      ally_bans: [],
+      enemy_bans: [],
+      actions: [],
+      pro_draft: { actions: ['Ahri', 'Vi'], we_pick_first: false, we_are_blue: false },
+    },
+  }
+  const calls = fakeApi({ '/lcu/state': live })
+  renderAt('/draft')
+  fireEvent.click(await screen.findByRole('button', { name: 'Follow the League client' }))
+  await waitFor(() =>
+    expect(calls.at(-1)?.body).toMatchObject({ actions: ['Ahri', 'Vi'], we_pick_first: false, we_are_blue: false }),
+  )
+  expect(screen.getByText(FOLLOWING)).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument()
 })

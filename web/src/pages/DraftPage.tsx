@@ -11,6 +11,7 @@ import {
   lockedBy,
   type PlannedGame,
   playedGames,
+  type SeriesPlanState,
   seriesScore,
   useChampions,
   usePlan,
@@ -66,6 +67,45 @@ interface StoredDraft {
   first: 'us' | 'them'
 }
 
+/**
+ * The board's draft: our own (kept per opponent and game) or, while following, the League client's custom
+ * tournament draft (scrims), which runs in the same pro order.
+ */
+function useBoardDraft(plan: SeriesPlanState) {
+  const [stored, setStored] = useLocalState<StoredDraft | null>('fele-draft', null)
+  const [follow, setFollow] = useState(false)
+  const live = useQuery({ queryKey: ['live'], queryFn: api.live, retry: false, refetchInterval: follow ? 1000 : 5000 })
+  const client = live.data?.champ_select?.pro_draft ?? null
+  const gameNumber = playedGames(plan).length + 1
+  const key = `${plan.opponent}:${gameNumber}`
+  const fresh = (): StoredDraft => ({
+    key,
+    actions: [],
+    side: weBlueNext(plan) ? 'blue' : 'red', // the side rule picks the defaults for each new game
+    first: weFirstNext(plan) ? 'us' : 'them',
+  })
+  const following = follow && client !== null
+  const own = stored?.key === key ? stored : fresh()
+  const draft: StoredDraft = following
+    ? {
+        key,
+        actions: client.actions,
+        side: client.we_are_blue ? 'blue' : 'red',
+        first: client.we_pick_first ? 'us' : 'them',
+      }
+    : own
+  const update = (change: (d: StoredDraft) => StoredDraft) => {
+    if (!following) {
+      setStored((prev) => change(prev?.key === key ? prev : fresh()))
+    }
+  }
+  const clear = () => {
+    setStored(null)
+    setFollow(false)
+  }
+  return { draft, update, clear, gameNumber, clientDraft: client !== null, following, setFollow }
+}
+
 function isTyping(target: EventTarget | null): boolean {
   return (
     target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement
@@ -101,7 +141,9 @@ function DraftControls({
   onSkip,
   onReset,
   onRecord,
+  following,
 }: {
+  following: boolean
   count: number
   series: ReturnType<typeof seriesScore>
   onUndo: () => void
@@ -110,6 +152,13 @@ function DraftControls({
   onRecord: (result: PlannedGame['result']) => void
 }) {
   const done = count >= TEMPLATE.length
+  if (following && !done) {
+    return (
+      <p role="status" className="text-sm text-muted">
+        The board follows the League client (custom tournament draft): bans and picks come from there.
+      </p>
+    )
+  }
   return (
     <div className="flex flex-wrap gap-2">
       <button
@@ -177,21 +226,11 @@ export function DraftPage() {
   const [plan, setPlan] = usePlan()
   const locked = lockedBy(plan, champions.byName)
   const [mode, setMode] = useState<DraftRequest['mode']>('best')
-  const [stored, setStored] = useLocalState<StoredDraft | null>('fele-draft', null)
+  const board = useBoardDraft(plan)
   const searchId = useId()
   const played = playedGames(plan)
-  const gameNumber = played.length + 1
-  const key = `${plan.opponent}:${gameNumber}`
-  const fresh = (): StoredDraft => ({
-    key,
-    actions: [],
-    side: weBlueNext(plan) ? 'blue' : 'red', // the side rule picks the defaults for each new game
-    first: weFirstNext(plan) ? 'us' : 'them',
-  })
-  const draft = stored?.key === key ? stored : fresh()
-  const { actions, side, first } = draft
-  const update = (change: (d: StoredDraft) => StoredDraft) =>
-    setStored((prev) => change(prev?.key === key ? prev : fresh()))
+  const { gameNumber, update } = board
+  const { actions, side, first } = board.draft
   const setActions = (next: (a: string[]) => string[]) => update((d) => ({ ...d, actions: next(d.actions) }))
   const series = seriesScore(plan)
   const us = prefs?.team ?? 'Cloud9 Kia'
@@ -263,7 +302,7 @@ export function DraftPage() {
       result,
     }
     setPlan({ ...plan, games: [...plan.games, game] }) // the next game's side and first pick follow the side rule
-    setStored(null)
+    board.clear()
   }
 
   if (!plan.opponent) {
@@ -316,16 +355,26 @@ export function DraftPage() {
             options={SIDES}
             value={side}
             onChange={(v) => update((d) => ({ ...d, side: v }))}
-            disabled={actions.length > 0}
+            disabled={actions.length > 0 || board.following}
           />
           <Segmented
             label="First pick"
             options={FIRST}
             value={first}
             onChange={(v) => update((d) => ({ ...d, first: v }))}
-            disabled={actions.length > 0}
+            disabled={actions.length > 0 || board.following}
           />
           <Segmented label="Recommendation mode" options={MODES} value={mode} onChange={setMode} />
+          {board.clientDraft ? (
+            <button
+              type="button"
+              aria-pressed={board.following}
+              onClick={() => board.setFollow(!board.following)}
+              className={`min-h-9 cursor-pointer rounded-md border px-3 text-sm ${board.following ? 'border-accent font-medium' : 'border-line'}`}
+            >
+              {board.following ? 'Following the League client' : 'Follow the League client'}
+            </button>
+          ) : null}
         </div>
       </header>
       <DraftBoard
@@ -343,6 +392,7 @@ export function DraftPage() {
         onSkip={() => append('')}
         onReset={reset}
         onRecord={record}
+        following={board.following}
       />
       <div className="grid gap-5 lg:grid-cols-[1fr_24rem]">
         <ChampionsPanel

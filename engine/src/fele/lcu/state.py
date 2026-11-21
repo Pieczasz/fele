@@ -9,6 +9,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Literal
 
+from fele.ingest.replay import DRAFT_TEMPLATE
 from fele.lcu import payloads
 
 QUEUES = {
@@ -20,6 +21,7 @@ QUEUES = {
     700: "Clash",
     720: "ARAM Clash",
 }
+BLUE_CELLS = 5  # cells 0-4 are blue side, 5-9 red
 POSITIONS = {"top": "top", "jungle": "jungle", "middle": "mid", "bottom": "bot", "utility": "support"}
 
 type Kind = Literal["ban", "pick"]
@@ -144,3 +146,30 @@ def parse_session(
 def party_of(lobby: payloads.Lobby | None) -> dict[str, str | None]:
     """Lobby members: puuid -> Riot ID (None when the client doesn't give one)."""
     return {m.puuid: m.riot_id for m in (lobby.members if lobby else []) if m.puuid}
+
+
+@dataclass(frozen=True)
+class ProOrder:
+    """A champ select that follows the pro (tournament draft) order, as the mock board wants it."""
+
+    actions: tuple[int, ...]  # completed actions in order; 0 = skipped ban
+    we_pick_first: bool
+    we_are_blue: bool
+
+
+def pro_order(cs: ChampSelect) -> ProOrder | None:
+    """The draft in pro order, when the client's action order is exactly the pro template (custom tournament draft,
+    scrims); None for solo queue's simultaneous bans and other orders."""
+    if len(cs.actions) != len(DRAFT_TEMPLATE) or not cs.allies:
+        return None
+    first_ally = cs.actions[0].ally
+    if any(
+        (a.kind, "A" if a.ally == first_ally else "B") != t for a, t in zip(cs.actions, DRAFT_TEMPLATE, strict=True)
+    ):
+        return None
+    done: list[int] = []
+    for a in cs.actions:
+        if not a.completed:
+            break
+        done.append(a.champion)
+    return ProOrder(tuple(done), we_pick_first=first_ally, we_are_blue=min(a.cell for a in cs.allies) < BLUE_CELLS)

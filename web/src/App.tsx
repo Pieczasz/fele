@@ -92,7 +92,7 @@ export function App() {
           <Link to="/" className="text-lg font-bold tracking-tight">
             fele <span className="text-sm font-normal text-muted">Fearless Ledger</span>
           </Link>
-          <nav aria-label="Main" className="flex gap-1 text-sm">
+          <nav aria-label="Main" className="flex flex-wrap gap-1 text-sm">
             {NAV.map(([to, label]) => (
               <NavLink
                 key={to}
