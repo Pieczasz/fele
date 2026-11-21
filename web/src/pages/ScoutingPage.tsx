@@ -5,6 +5,7 @@ import { Cards } from '../components/Cards.tsx'
 import { Champion, ChampionIcon } from '../components/ChampionIcon.tsx'
 import { NBadge, RateBar, TendencyBadge } from '../components/Evidence.tsx'
 import { QueryState, Section } from '../components/QueryState.tsx'
+import { ScrollArea } from '../components/ScrollArea.tsx'
 import { Segmented } from '../components/Segmented.tsx'
 import { pct } from '../format.ts'
 import { usePeriod, useTeamId } from '../hooks.ts'
@@ -24,7 +25,7 @@ function PriorityTable({ rows }: { rows: DraftRow[] }) {
     return <p className="text-muted">No games in this split for the selected period.</p>
   }
   return (
-    <div className="overflow-x-auto">
+    <ScrollArea label="Draft priorities">
       <table className="w-full text-sm">
         <caption className="sr-only">Champions this team picks or bans, most often first</caption>
         <thead className="text-left text-xs text-muted">
@@ -72,7 +73,7 @@ function PriorityTable({ rows }: { rows: DraftRow[] }) {
           ))}
         </tbody>
       </table>
-    </div>
+    </ScrollArea>
   )
 }
 

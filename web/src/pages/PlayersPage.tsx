@@ -3,6 +3,7 @@ import { api, type Player } from '../api/client.ts'
 import { Champion } from '../components/ChampionIcon.tsx'
 import { NBadge } from '../components/Evidence.tsx'
 import { QueryState } from '../components/QueryState.tsx'
+import { ScrollArea } from '../components/ScrollArea.tsx'
 import { interval, pct, shortDate } from '../format.ts'
 import { useTeamId } from '../hooks.ts'
 
@@ -43,45 +44,47 @@ function PlayerCard({ p }: { p: Player }) {
           hint="Top live meta champions for the role with 2+ pro games"
         />
       </dl>
-      <table className="w-full text-sm">
-        <caption className="sr-only">{p.name}'s most comfortable champions</caption>
-        <thead className="text-left text-xs text-muted">
-          <tr>
-            <th scope="col" className="py-1 font-medium">
-              Champion
-            </th>
-            <th scope="col" className="text-right font-medium">
-              Record
-            </th>
-            <th
-              scope="col"
-              className="text-right font-medium"
-              title="Win rate pulled toward the role average when games are few"
-            >
-              Adj. win rate
-            </th>
-            <th scope="col" className="text-right font-medium" title="Last played">
-              Last
-            </th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-line">
-          {p.champions.map((c) => (
-            <tr key={c.champion}>
-              <th scope="row" className="py-1 text-left font-normal">
-                <Champion name={c.champion} championKey={c.key} />
+      <ScrollArea label="Champion pool">
+        <table className="w-full text-sm">
+          <caption className="sr-only">{p.name}'s most comfortable champions</caption>
+          <thead className="text-left text-xs text-muted">
+            <tr>
+              <th scope="col" className="py-1 font-medium">
+                Champion
               </th>
-              <td className="text-right">
-                <NBadge k={c.k} n={c.n} unit="games won" />
-              </td>
-              <td className="tabular text-right" title={`95% ${interval(c.shrunk_lo, c.shrunk_hi)}`}>
-                {pct(c.shrunk)}
-              </td>
-              <td className="tabular text-right text-muted">{shortDate(c.last_played)}</td>
+              <th scope="col" className="text-right font-medium">
+                Record
+              </th>
+              <th
+                scope="col"
+                className="text-right font-medium"
+                title="Win rate pulled toward the role average when games are few"
+              >
+                Adj. win rate
+              </th>
+              <th scope="col" className="text-right font-medium" title="Last played">
+                Last
+              </th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody className="divide-y divide-line">
+            {p.champions.map((c) => (
+              <tr key={c.champion}>
+                <th scope="row" className="py-1 text-left font-normal">
+                  <Champion name={c.champion} championKey={c.key} />
+                </th>
+                <td className="text-right">
+                  <NBadge k={c.k} n={c.n} unit="games won" />
+                </td>
+                <td className="tabular text-right" title={`95% ${interval(c.shrunk_lo, c.shrunk_hi)}`}>
+                  {pct(c.shrunk)}
+                </td>
+                <td className="tabular text-right text-muted">{shortDate(c.last_played)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </ScrollArea>
     </article>
   )
 }

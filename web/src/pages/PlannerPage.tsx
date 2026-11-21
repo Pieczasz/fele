@@ -6,6 +6,7 @@ import { resolveChampion } from '../champions.ts'
 import { Champion } from '../components/ChampionIcon.tsx'
 import { NBadge } from '../components/Evidence.tsx'
 import { Section } from '../components/QueryState.tsx'
+import { ScrollArea } from '../components/ScrollArea.tsx'
 import { Segmented } from '../components/Segmented.tsx'
 import { pct } from '../format.ts'
 import {
@@ -181,35 +182,37 @@ function Results({ data, keys }: { data: SeriesPlan; keys: string[] }) {
           Add champions to the save list (or comfort picks in Coach) to see when each is still available.
         </p>
       ) : null}
-      <table className={`w-full text-sm ${keys.length === 0 ? 'hidden' : ''}`}>
-        <caption className="sr-only">Chance each champion is still available, by game</caption>
-        <thead className="text-left text-xs text-muted">
-          <tr>
-            <th scope="col" className="font-medium">
-              Champion
-            </th>
-            {columns.map((label) => (
-              <th key={label} scope="col" className="text-right font-medium">
-                {label}
+      <ScrollArea label="Availability by game">
+        <table className={`w-full text-sm ${keys.length === 0 ? 'hidden' : ''}`}>
+          <caption className="sr-only">Chance each champion is still available, by game</caption>
+          <thead className="text-left text-xs text-muted">
+            <tr>
+              <th scope="col" className="font-medium">
+                Champion
               </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-line">
-          {keys.map((c) => (
-            <tr key={c}>
-              <th scope="row" className="py-1 text-left font-normal">
-                {c}
-              </th>
-              {columns.map((label, i) => (
-                <td key={label} className="text-right tabular">
-                  {pct(p.availability[c]?.[i])}
-                </td>
+              {columns.map((label) => (
+                <th key={label} scope="col" className="text-right font-medium">
+                  {label}
+                </th>
               ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody className="divide-y divide-line">
+            {keys.map((c) => (
+              <tr key={c}>
+                <th scope="row" className="py-1 text-left font-normal">
+                  {c}
+                </th>
+                {columns.map((label, i) => (
+                  <td key={label} className="text-right tabular">
+                    {pct(p.availability[c]?.[i])}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </ScrollArea>
       <ul className="text-xs text-muted">
         {p.notes.map((n) => (
           <li key={n}>{n}</li>

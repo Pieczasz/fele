@@ -154,6 +154,10 @@ Set `DEMO_PASSWORD` in `.env` to put a hosted demo behind a password (HttpOnly s
 
 The web app's TypeScript API client is generated from the OpenAPI spec: `cd web && pnpm gen:api`.
 
+Browser tests: `make e2e` runs Playwright on desktop and phone sizes, with an axe accessibility scan of every page
+(in CI against a fake API; `E2E_REAL=1 make e2e` against the real API on :8000). Try fele Live without the game:
+`uv run fele lcu-fake`, then `FELE_LCU_LOCKFILE=data_local/fake-lockfile uv run fele serve --lcu`.
+
 ### Querying the data
 
 `make db` builds `data_local/fele.duckdb`, which holds views over the local files. In PyCharm, the **fele.duckdb** data

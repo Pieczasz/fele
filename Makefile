@@ -1,5 +1,5 @@
 # fele developer shortcuts. `make help` lists them.
-.PHONY: help setup data check fix test qodana up down db
+.PHONY: help setup data check fix test e2e qodana up down db
 
 help:  ## list targets
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-8s %s\n", $$1, $$2}'
@@ -26,6 +26,9 @@ fix:  ## auto-fix lint + formatting
 test:  ## tests only
 	cd engine && uv run pytest
 	cd web && pnpm test
+
+e2e:  ## Browser tests + accessibility (Playwright); E2E_REAL=1 runs them against the real API on :8000
+	cd web && pnpm e2e
 
 qodana:  ## JetBrains Qodana scan in Docker (report: scratch/qodana)
 	docker compose --profile qodana run --rm qodana

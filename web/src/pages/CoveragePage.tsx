@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '../api/client.ts'
 import { NBadge } from '../components/Evidence.tsx'
 import { QueryState, Section } from '../components/QueryState.tsx'
+import { ScrollArea } from '../components/ScrollArea.tsx'
 import { shortDate } from '../format.ts'
 
 export function CoveragePage() {
@@ -16,39 +17,41 @@ export function CoveragePage() {
         {(data) => (
           <div className="grid gap-5 lg:grid-cols-2">
             <Section title="Pro games by league" hint="GRID official data">
-              <table className="w-full text-sm">
-                <caption className="sr-only">Pro games per league</caption>
-                <thead className="text-left text-xs text-muted">
-                  <tr>
-                    <th scope="col" className="py-1 font-medium">
-                      League
-                    </th>
-                    <th scope="col" className="text-right font-medium">
-                      Teams
-                    </th>
-                    <th scope="col" className="text-right font-medium">
-                      Games
-                    </th>
-                    <th scope="col" className="text-right font-medium">
-                      Period
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-line">
-                  {data.leagues.map((l) => (
-                    <tr key={l.league}>
-                      <th scope="row" className="py-1.5 text-left font-normal">
-                        {l.league}
+              <ScrollArea label="Coverage table">
+                <table className="w-full text-sm">
+                  <caption className="sr-only">Pro games per league</caption>
+                  <thead className="text-left text-xs text-muted">
+                    <tr>
+                      <th scope="col" className="py-1 font-medium">
+                        League
                       </th>
-                      <td className="tabular text-right">{l.teams}</td>
-                      <td className="tabular text-right">{l.games}</td>
-                      <td className="tabular text-right text-muted">
-                        {shortDate(l.first_game)} – {shortDate(l.last_game)}
-                      </td>
+                      <th scope="col" className="text-right font-medium">
+                        Teams
+                      </th>
+                      <th scope="col" className="text-right font-medium">
+                        Games
+                      </th>
+                      <th scope="col" className="text-right font-medium">
+                        Period
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-line">
+                    {data.leagues.map((l) => (
+                      <tr key={l.league}>
+                        <th scope="row" className="py-1.5 text-left font-normal">
+                          {l.league}
+                        </th>
+                        <td className="tabular text-right">{l.teams}</td>
+                        <td className="tabular text-right">{l.games}</td>
+                        <td className="tabular text-right text-muted">
+                          {shortDate(l.first_game)} – {shortDate(l.last_game)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </ScrollArea>
             </Section>
             <Section title="Solo queue sample" hint="Challenger + Grandmaster ranked solo, KR / EUW / NA (Riot API)">
               {data.soloq.length === 0 ? (

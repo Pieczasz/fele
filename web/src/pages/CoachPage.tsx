@@ -2,6 +2,7 @@ import { useId, useState } from 'react'
 import type { Preferences } from '../api/client.ts'
 import { resolveChampion } from '../champions.ts'
 import { Section } from '../components/QueryState.tsx'
+import { ScrollArea } from '../components/ScrollArea.tsx'
 import { useChampions, usePrefs } from '../hooks.ts'
 import { download } from '../store.ts'
 
@@ -90,57 +91,59 @@ function PlayerEditor({
           wants priority picks
         </label>
       </header>
-      <table className="mb-2 w-full text-sm">
-        <caption className="sr-only">{player.name}'s champion pool</caption>
-        <tbody className="divide-y divide-line">
-          {pool.map((c, i) => (
-            <tr key={c.champion}>
-              <th scope="row" className="py-1 text-left font-normal">
-                {c.champion}
-              </th>
-              <td>
-                <select
-                  aria-label={`${c.champion} comfort`}
-                  value={c.comfort ?? 'comfortable'}
-                  onChange={(e) =>
-                    onChange({
-                      ...player,
-                      pool: pool.map((x, j) => (j === i ? { ...x, comfort: e.target.value as Comfort } : x)),
-                    })
-                  }
-                  className="rounded border border-line bg-bg px-1"
-                >
-                  {COMFORTS.map((k) => (
-                    <option key={k} value={k}>
-                      {k}
-                    </option>
-                  ))}
-                </select>
-              </td>
-              <td>
-                <input
-                  aria-label={`${c.champion} note`}
-                  value={c.note ?? ''}
-                  onChange={(e) =>
-                    onChange({ ...player, pool: pool.map((x, j) => (j === i ? { ...x, note: e.target.value } : x)) })
-                  }
-                  className="w-full rounded border border-line bg-bg px-1"
-                />
-              </td>
-              <td className="text-right">
-                <button
-                  type="button"
-                  aria-label={`Remove ${c.champion}`}
-                  onClick={() => onChange({ ...player, pool: pool.filter((_, j) => j !== i) })}
-                  className="cursor-pointer text-muted"
-                >
-                  ×
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <ScrollArea label="Player pool">
+        <table className="mb-2 w-full text-sm">
+          <caption className="sr-only">{player.name}'s champion pool</caption>
+          <tbody className="divide-y divide-line">
+            {pool.map((c, i) => (
+              <tr key={c.champion}>
+                <th scope="row" className="py-1 text-left font-normal">
+                  {c.champion}
+                </th>
+                <td>
+                  <select
+                    aria-label={`${c.champion} comfort`}
+                    value={c.comfort ?? 'comfortable'}
+                    onChange={(e) =>
+                      onChange({
+                        ...player,
+                        pool: pool.map((x, j) => (j === i ? { ...x, comfort: e.target.value as Comfort } : x)),
+                      })
+                    }
+                    className="rounded border border-line bg-bg px-1"
+                  >
+                    {COMFORTS.map((k) => (
+                      <option key={k} value={k}>
+                        {k}
+                      </option>
+                    ))}
+                  </select>
+                </td>
+                <td>
+                  <input
+                    aria-label={`${c.champion} note`}
+                    value={c.note ?? ''}
+                    onChange={(e) =>
+                      onChange({ ...player, pool: pool.map((x, j) => (j === i ? { ...x, note: e.target.value } : x)) })
+                    }
+                    className="w-full rounded border border-line bg-bg px-1"
+                  />
+                </td>
+                <td className="text-right">
+                  <button
+                    type="button"
+                    aria-label={`Remove ${c.champion}`}
+                    onClick={() => onChange({ ...player, pool: pool.filter((_, j) => j !== i) })}
+                    className="cursor-pointer text-muted"
+                  >
+                    ×
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </ScrollArea>
       <div className="mb-2 flex gap-2 text-sm">
         <input
           list={listId}

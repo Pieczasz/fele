@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useEffect, useId, useRef, useState } from 'react'
 import { Link, Navigate, NavLink, Route, Routes, useLocation } from 'react-router'
 import { api, LoginRequiredError } from './api/client.ts'
+import { ErrorBoundary } from './components/ErrorBoundary.tsx'
 import { Footer } from './components/Footer.tsx'
 import { Login } from './components/Login.tsx'
 import { CoachPage } from './pages/CoachPage.tsx'
@@ -80,6 +81,7 @@ export function App() {
   const teams = useQuery({ queryKey: ['teams'], queryFn: api.teams, retry: false })
   const needsLogin = teams.error instanceof LoginRequiredError
   const mainId = useId()
+  const { pathname } = useLocation()
   return (
     <div className="flex min-h-screen flex-col bg-bg text-ink">
       <a href={`#${mainId}`} className="sr-only focus:not-sr-only focus:absolute focus:p-2">
@@ -114,22 +116,24 @@ export function App() {
         {needsLogin ? (
           <Login />
         ) : (
-          <Routes>
-            <Route path="/" element={<TeamsPage />} />
-            <Route path="/teams/:teamId" element={<TeamLayout />}>
-              <Route index={true} element={<Navigate to="scouting" replace={true} />} />
-              <Route path="scouting" element={<ScoutingPage />} />
-              <Route path="players" element={<PlayersPage />} />
-              <Route path="macro" element={<MacroPage />} />
-            </Route>
-            <Route path="/planner" element={<PlannerPage />} />
-            <Route path="/draft" element={<DraftPage />} />
-            <Route path="/live" element={<LivePage />} />
-            <Route path="/coach" element={<CoachPage />} />
-            <Route path="/meta" element={<MetaPage />} />
-            <Route path="/coverage" element={<CoveragePage />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+          <ErrorBoundary key={pathname}>
+            <Routes>
+              <Route path="/" element={<TeamsPage />} />
+              <Route path="/teams/:teamId" element={<TeamLayout />}>
+                <Route index={true} element={<Navigate to="scouting" replace={true} />} />
+                <Route path="scouting" element={<ScoutingPage />} />
+                <Route path="players" element={<PlayersPage />} />
+                <Route path="macro" element={<MacroPage />} />
+              </Route>
+              <Route path="/planner" element={<PlannerPage />} />
+              <Route path="/draft" element={<DraftPage />} />
+              <Route path="/live" element={<LivePage />} />
+              <Route path="/coach" element={<CoachPage />} />
+              <Route path="/meta" element={<MetaPage />} />
+              <Route path="/coverage" element={<CoveragePage />} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </ErrorBoundary>
         )}
       </main>
       <Footer />

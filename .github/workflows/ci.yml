@@ -62,6 +62,13 @@ jobs:
       - name: Tests + coverage
         run: pnpm coverage
       - run: pnpm build
+      - name: Browser end-to-end + accessibility (Playwright, axe; desktop and phone)
+        run: |
+          pnpm exec playwright install --with-deps chromium
+          pnpm e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with: { name: playwright-traces, path: web/test-results, retention-days: 7 }
 
   docker:
     runs-on: ubuntu-latest

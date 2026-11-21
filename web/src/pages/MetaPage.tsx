@@ -5,6 +5,7 @@ import { api, type Meta } from '../api/client.ts'
 import { Champion } from '../components/ChampionIcon.tsx'
 import { NBadge, RateBar } from '../components/Evidence.tsx'
 import { QueryState, Section } from '../components/QueryState.tsx'
+import { ScrollArea } from '../components/ScrollArea.tsx'
 import { Segmented } from '../components/Segmented.tsx'
 import { interval, pct, signed } from '../format.ts'
 
@@ -51,7 +52,7 @@ function MetaTable({ data }: { data: Meta }) {
       <div className="mb-3">
         <Segmented label="Role" options={ROLES} value={role} onChange={setRole} />
       </div>
-      <div className="overflow-x-auto">
+      <ScrollArea label="Meta table">
         <table className="w-full text-sm">
           <caption className="sr-only">Champions ranked by meta score</caption>
           <thead className="text-left text-xs text-muted">
@@ -113,7 +114,7 @@ function MetaTable({ data }: { data: Meta }) {
             ))}
           </tbody>
         </table>
-      </div>
+      </ScrollArea>
     </Section>
   )
 }

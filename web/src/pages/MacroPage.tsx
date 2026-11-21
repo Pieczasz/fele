@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { api, type KillCell, type Macro } from '../api/client.ts'
 import { NBadge, RateBar, TendencyBadge } from '../components/Evidence.tsx'
 import { QueryState, Section } from '../components/QueryState.tsx'
+import { ScrollArea } from '../components/ScrollArea.tsx'
 import { Segmented } from '../components/Segmented.tsx'
 import { clock, mapImage } from '../format.ts'
 import { useInfo, usePeriod, useTeamId } from '../hooks.ts'
@@ -91,46 +92,50 @@ function Report({ data }: { data: Macro }) {
         <div className="mb-3">
           <Segmented label="Early-game rates: side" options={SPLITS} value={split} onChange={setSplit} />
         </div>
-        <table className="w-full text-sm">
-          <caption className="sr-only">Early game rates compared with the league</caption>
-          <tbody className="divide-y divide-line">
-            {rates.map((r) => (
-              <tr key={r.metric}>
-                <th scope="row" className="py-1.5 pr-3 text-left font-normal">
-                  {METRICS[r.metric] ?? r.metric}
-                </th>
-                <td className="pr-3">
-                  <RateBar rate={r} base={r.base_rate} />
-                </td>
-                <td>
-                  <TendencyBadge tendency={r.tendency} />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </Section>
-      <div className="grid gap-5 lg:grid-cols-2">
-        <Section title="Objective timings" hint="Team's own first, median (middle half of games)">
+        <ScrollArea label="Macro table">
           <table className="w-full text-sm">
-            <caption className="sr-only">Median time of the team's first objectives</caption>
+            <caption className="sr-only">Early game rates compared with the league</caption>
             <tbody className="divide-y divide-line">
-              {data.timings.map((t) => (
-                <tr key={t.metric}>
-                  <th scope="row" className="py-1.5 text-left font-normal">
-                    {TIMINGS[t.metric] ?? t.metric}
+              {rates.map((r) => (
+                <tr key={r.metric}>
+                  <th scope="row" className="py-1.5 pr-3 text-left font-normal">
+                    {METRICS[r.metric] ?? r.metric}
                   </th>
-                  <td className="tabular text-right font-medium">{clock(t.median_s)}</td>
-                  <td className="tabular pl-2 text-right text-muted">
-                    {clock(t.q25_s)}–{clock(t.q75_s)}
+                  <td className="pr-3">
+                    <RateBar rate={r} base={r.base_rate} />
                   </td>
-                  <td className="pl-2 text-right">
-                    <NBadge n={t.n} />
+                  <td>
+                    <TendencyBadge tendency={r.tendency} />
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+        </ScrollArea>
+      </Section>
+      <div className="grid gap-5 lg:grid-cols-2">
+        <Section title="Objective timings" hint="Team's own first, median (middle half of games)">
+          <ScrollArea label="Macro table">
+            <table className="w-full text-sm">
+              <caption className="sr-only">Median time of the team's first objectives</caption>
+              <tbody className="divide-y divide-line">
+                {data.timings.map((t) => (
+                  <tr key={t.metric}>
+                    <th scope="row" className="py-1.5 text-left font-normal">
+                      {TIMINGS[t.metric] ?? t.metric}
+                    </th>
+                    <td className="tabular text-right font-medium">{clock(t.median_s)}</td>
+                    <td className="tabular pl-2 text-right text-muted">
+                      {clock(t.q25_s)}–{clock(t.q75_s)}
+                    </td>
+                    <td className="pl-2 text-right">
+                      <NBadge n={t.n} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </ScrollArea>
         </Section>
         <Section title="Where the first 15 minutes are fought" hint={<NBadge n={sideGames} />}>
           <div className="mb-3 flex flex-wrap gap-3">
