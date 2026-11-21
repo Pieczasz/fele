@@ -31,6 +31,11 @@ Every number shows its sample size, and every recommendation is a ranked option 
    range sits on top. Keyboard-driven, and a finished draft is saved into the series plan.
 4. **Add what the data can't see.** Coach inputs: each player's comfort tiers and refusals, team style, never-pick
    and must-ban lists. They're stored in the browser and used by the recommendations immediately.
+5. **fele Live in your own games.** With `fele serve --lcu`, fele follows the League client on the same computer:
+   lobby, then champ select (Ranked Solo/Duo, Flex, Clash). Your party's recent games load from the client while you
+   queue. On your turn you get five ranked bans or picks, each with its reasons: live-patch high-elo strength at your
+   position, your own recent games on it, the lane matchup against the enemy pick, and what the comp lacks. Names and
+   stats only for you and your party; other teammates show as "Ally", and the enemy team is never looked up.
 
 | Page | Answers |
 |---|---|
@@ -39,6 +44,7 @@ Every number shows its sample size, and every recommendation is a ranked option 
 | Mock draft | Options for our pick/ban with reasons; their likely next action; live win probability |
 | Meta | Live patch: pro presence, shrunk pro and high-elo solo-queue win rates, patch changes |
 | Coach | Comfort tiers, refusals, style, save / never-pick / must-ban lists |
+| Live | Champ select in your own games: your party's recent pools and ranked options for the current ban or pick |
 | Data | Coverage: games per league and team, solo-queue sample size |
 
 ## How it works
@@ -128,7 +134,10 @@ cd web && pnpm dev                 # http://localhost:5173
 | `live` / `backtest` | Build the cached live draft context (production models refit on all games); recommender back-test report |
 | `explain` / `holdout` | Coefficients, SHAP and posterior summaries of the Phase 8 models; the one-time final holdout check |
 | `db` | Builds `data_local/fele.duckdb`: views `grid.*`, `lol.*`, `static.*`, `leaguepedia.*`, `soloq.*`, `aggregates.*` |
-| `serve` | API with Swagger UI at `/docs`, ReDoc at `/redoc`, OpenAPI spec at `/openapi.json` |
+| `serve` | API with Swagger UI at `/docs`, ReDoc at `/redoc`, OpenAPI spec at `/openapi.json`; `--lcu` also follows the local League client (fele Live) |
+| `lcu-fake` | A scripted fake League client (lobby → Ranked Flex champ select, looping) to try fele Live without the game |
+| `lcu-capture` | Records anonymised League client payloads to `data_local/lcu_captures/` (parser checks) |
+| `eval-solo` | Champ-select scorer check on the cached high-elo matches → `docs/experiments/<date>-solo.md` |
 
 ### The web app
 

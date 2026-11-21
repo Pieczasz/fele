@@ -31,7 +31,7 @@ Policy rules (GP + LOLDOC, checked 2026-11-18):
 | Unapproved use case: "Apps that dictate player decisions." | LOLDOC | Same as the row above: show several options and why each fits, not a single answer. |
 | "Products cannot create alternatives for official skill ranking systems… Prohibited alternatives include MMR or ELO calculators." | GP, LOLDOC | No player MMR or Elo estimates and no custom player rating. Champion strength scores are fine (they rate champions, not players). Don't present a "player power score" either. |
 | "Products cannot de-anonymize players who cannot reasonably be identified from visible information." | GP | Do **not** infer or link pro players' smurf or alt accounts. Only use Riot IDs that the coach types in by hand. Do not add an "accounts likely belonging to X" feature. |
-| "Products cannot identify or analyze players who are deliberately hidden by the game." | LOLDOC (Game Integrity) | Don't touch champ-select or live-game data. Only analyze finished-match data from match-v5 as returned. |
+| "Products cannot identify or analyze players who are deliberately hidden by the game." | LOLDOC (Game Integrity) | Revised 2026-11-21 (fele Live): champ select is read from the local League client only for the user and their party members; non-party allies show as "Ally", enemies are never analysed. Everything else uses finished-match data. See section 10. |
 | "Products must not use or incorporate information not present in the game client that would give players a competitive edge…" and "Products may not provide any game-session-specific information that would be previously unknown to the player." | LOLDOC | Don't use spectator-v5 or live-game features. Our use is pre-match prep only. |
 | "Products cannot display win rates for Augments or Arena Mode items." | LOLDOC | Not relevant (queue 420), but ignore the `playerAugment*` fields. |
 | Custom-queue match history may not be shown publicly without opt-in | LOLDOC | Filter to `queue=420` only. |
@@ -199,3 +199,24 @@ The key was loaded from `.env` into the shell environment and was never printed.
 - **Budget:** about 100 requests per 2 min per region gives about 3,000 requests per hour per region, or about 9,000 per hour across KR, EUW and NA, minus whatever other key users consume.
 - **Filtering to the current patch:** filter ids with `startTime` set to the patch release epoch (in seconds) and `queue=420`. Then keep only matches whose `gameVersion` starts with `16.23.`.
 - **Deduplication:** high-elo players share games, so deduplicate match ids across players.
+
+## 10. League Client API (LCU), champ select (checked 2026-11-21)
+
+- Riot: the League Client API "is not officially supported for use with third party applications"; no promises on
+  documentation, uptime or notice of changes. Developers note LCU use on their Developer Portal product
+  (https://developer.riotgames.com/docs/lol, League Client APIs section).
+- Champ select anonymity (since patch 12.22): "Apps that reveal player names or stats in Champ Select will be asked to
+  remove this feature immediately. This specifically applies only to Ranked Solo/Duo" (Riot DevRel, quoted at
+  https://devtrackers.gg/leagueoflegends/p/749a443a-apps-that-reveal-player-names-or-stats-in-champ-select-need-to-remove-these-informations-starting-patch-12-22).
+  Secondary summaries (Overwolf compliance guides) say party members are exempt.
+- Recommendations must offer choices: products "may highlight decisions that are important and give multiple choices",
+  and "Apps that dictate player decisions" are not approved (developer.riotgames.com, Game Integrity).
+- A player's own match history is an approved use case ("Training tools that allow players to view their own match
+  histories and aggregate stats").
+- Since 2026-10-06 Riot blocks memory reading by unknown apps; LCU and official APIs were reported as unaffected
+  (https://hexgate.app/blog/riot-third-party-apps/).
+
+**fele's rule (stricter than Riot's):** identities and stats only for the local player and lobby party members, in every
+queue; other allies are shown as "Ally · position"; enemies are never identified or analysed; the client is read only
+from 127.0.0.1 by the user's own fele process; nothing from the client is stored except the user's own scrim log.
+

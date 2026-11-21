@@ -281,6 +281,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/lcu/state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * League client status, champ select and advice
+         * @description What the local client shows now (party members by name, other allies as "Ally", enemies hidden), with ranked
+         *     options for the action in progress. Advice is recomputed only when the draft or a party pool changes.
+         */
+        get: operations["lcu_state_lcu_state_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -316,6 +337,15 @@ export interface components {
              * @default []
              */
             champions: string[];
+        };
+        /** ChampRef */
+        ChampRef: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Key */
+            key: string | null;
         };
         /** ChampionCount */
         ChampionCount: {
@@ -549,6 +579,98 @@ export interface components {
             /** Probability */
             probability: number;
         };
+        /** LiveAction */
+        LiveAction: {
+            /** Cell */
+            cell: number;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "ban" | "pick";
+            /** Ally */
+            ally: boolean;
+            champion: components["schemas"]["ChampRef"] | null;
+            /** Completed */
+            completed: boolean;
+            /** In Progress */
+            in_progress: boolean;
+        };
+        /** LiveAdvice */
+        LiveAdvice: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "ban" | "pick";
+            /** For Cell */
+            for_cell: number;
+            /** For Name */
+            for_name: string | null;
+            /** Options */
+            options: components["schemas"]["OptionOut"][];
+            /** Note */
+            note: string;
+        };
+        /** LiveAlly */
+        LiveAlly: {
+            /** Cell */
+            cell: number;
+            /** Position */
+            position: string | null;
+            champion: components["schemas"]["ChampRef"] | null;
+            intent: components["schemas"]["ChampRef"] | null;
+            /** Name */
+            name: string | null;
+            /** Me */
+            me: boolean;
+            /** Games */
+            games: number;
+            /** Pool */
+            pool: components["schemas"]["PoolChamp"][];
+        };
+        /** LiveChampSelect */
+        LiveChampSelect: {
+            /** Queue */
+            queue: number;
+            /** Queue Name */
+            queue_name: string;
+            /** Custom */
+            custom: boolean;
+            /** Phase */
+            phase: string;
+            /** Time Left S */
+            time_left_s: number;
+            /** Allies */
+            allies: components["schemas"]["LiveAlly"][];
+            /** Enemy Picks */
+            enemy_picks: components["schemas"]["ChampRef"][];
+            /** Ally Bans */
+            ally_bans: components["schemas"]["ChampRef"][];
+            /** Enemy Bans */
+            enemy_bans: components["schemas"]["ChampRef"][];
+            /** Actions */
+            actions: components["schemas"]["LiveAction"][];
+        };
+        /** LiveState */
+        LiveState: {
+            /** Enabled */
+            enabled: boolean;
+            /** Connected */
+            connected: boolean;
+            /** Phase */
+            phase: string | null;
+            /** Me */
+            me: string | null;
+            /** Party */
+            party: string[];
+            champ_select: components["schemas"]["LiveChampSelect"] | null;
+            advice: components["schemas"]["LiveAdvice"] | null;
+            /** Sample */
+            sample: string;
+            /** Version */
+            version: number;
+        };
         /** Macro */
         Macro: {
             team: components["schemas"]["Team"];
@@ -781,6 +903,16 @@ export interface components {
             team: components["schemas"]["Team"];
             /** Players */
             players: components["schemas"]["Player"][];
+        };
+        /** PoolChamp */
+        PoolChamp: {
+            champion: components["schemas"]["ChampRef"];
+            /** Games */
+            games: number;
+            /** Wins */
+            wins: number;
+            /** Last Played */
+            last_played: string | null;
         };
         /** Preferences */
         Preferences: {
@@ -1439,6 +1571,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Preferences"];
+                };
+            };
+        };
+    };
+    lcu_state_lcu_state_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiveState"];
                 };
             };
         };

@@ -2,6 +2,7 @@
 
 import asyncio
 from collections import Counter
+from pathlib import Path
 from typing import NoReturn
 
 import httpx
@@ -327,12 +328,57 @@ def backtest() -> None:
 
 
 @app.command()
+def eval_solo() -> None:
+    """Champ-select scorer check on the cached high-elo matches -> docs/experiments/<date>-solo.md."""
+    from fele.eval import run
+    from fele.eval import solo as ev
+
+    path = run.write_report("solo", ev.report())
+    typer.echo(f"report -> {path}")
+
+
+@app.command()
 def live() -> None:
     """Build (or refresh) the cached live draft context: production models refit on all games (~30 s)."""
     from fele.engine.live import get_live
 
     lv = get_live()
     typer.echo(f"live context ready: {len(lv.vocab)} champions, {len(lv.lineups)} teams, patch {lv.patch}")
+
+
+@app.command()
+def lcu_fake(lockfile: Path = Path("data_local/fake-lockfile")) -> None:
+    """Run a scripted fake League client (lobby -> Ranked Flex champ select, looping) for demos and E2E tests."""
+    import time
+
+    from fele.lcu.fake import serve as serve_fake
+
+    lockfile.parent.mkdir(parents=True, exist_ok=True)
+    server = serve_fake(lockfile.resolve())
+    typer.echo(f"fake League client on 127.0.0.1:{server.server_port}; lockfile {lockfile.resolve()}")
+    typer.echo(f"now run: FELE_LCU_LOCKFILE={lockfile.resolve()} uv run fele serve --lcu   (Ctrl-C to stop)")
+    try:
+        while True:
+            time.sleep(3600)
+    except KeyboardInterrupt:
+        server.shutdown()
+        server.server_close()
+
+
+@app.command()
+def lcu_capture(seconds: int = 120, out: Path | None = None) -> None:
+    """Record anonymised League client payloads (lobby + champ select) to data_local/lcu_captures/ for parser checks."""
+    from datetime import UTC, datetime
+
+    from fele.lcu.capture import capture
+    from fele.lcu.connect import find_client
+
+    lcu = find_client()
+    if lcu is None:
+        die("League client not found: start it first (or set FELE_LCU_LOCKFILE)")
+    target = out or settings().local("lcu_captures") / f"{datetime.now(UTC):%Y%m%d-%H%M%S}"
+    n = asyncio.run(capture(lcu, target, seconds))
+    typer.echo(f"{n} frames -> {target}")
 
 
 @app.command()
@@ -346,9 +392,15 @@ def db() -> None:
 
 
 @app.command()
-def serve(host: str = "127.0.0.1", port: int = 8000, reload: bool = True) -> None:
-    """Run the API (http://localhost:8000/docs)."""
+def serve(host: str = "127.0.0.1", port: int = 8000, reload: bool = True, lcu: bool = False) -> None:
+    """Run the API (http://localhost:8000/docs). --lcu also watches the local League client (fele Live)."""
+    import os
+
     import uvicorn
+
+    if lcu:
+        os.environ["FELE_LCU"] = "1"  # read by the app's lifespan (also in uvicorn's reload worker)
+        settings.cache_clear()
 
     uvicorn.run("fele.api.app:app", host=host, port=port, reload=reload)
 

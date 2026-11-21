@@ -123,6 +123,27 @@ top-10): first bans 74%, first picks 68%, second bans 69%, last picks 73%. By le
 LTA South 71%, LEC 68%, **LCS 65%**: Cloud9's own league is the hardest to predict, on the fewest test actions
 (900), so read its numbers with that n.
 
+## Champ-select scorer (fele Live, 2026-11-21) — [`experiments/2026-11-21-solo.md`](experiments/2026-11-21-solo.md)
+
+For the user's own games, `engine/solo.py` ranks picks from fixed, explained parts: shrunk high-elo win rate at the
+position, presence (how often high-elo players pick it there), the player's recency-weighted games and shrunk win
+rate on it (client match history), the shrunk lane matchup against the enemy pick, and comp gaps. No GRID data.
+
+Check (`fele eval-solo`): 902 Challenger/Grandmaster players from the cached 16.22–16.23 sample; for each of their
+games after the fifth, the pool comes from their earlier games only, and the bans and the enemy laner are visible.
+
+| Method | n | top-1 | top-5 | top-10 |
+|---|---|---|---|---|
+| scorer | 4,845 | 37.5% ± 1.4% | 63.3% ± 1.4% | 74.8% ± 1.2% |
+| most played (comfort only) | 4,845 | 36.1% | 58.9% | 63.6% |
+| meta only | 4,845 | 6.5% | 28.6% | 47.3% |
+| presence only | 4,845 | 10.2% | 35.2% | 54.0% |
+
+The comfort and presence weights were raised (0.8 → 1.6, 0.25 → 0.5) after a sweep chosen on half the players; the
+other half moved from 58.0% to 62.5% top-5, and the curve is flat from 1.6 to 3.2. Caveats: this measures whether the
+scorer finds what players *do* pick, not what wins; the players are far above most users' rank; and the meta tables
+include the evaluated matches (one game in ~1,800 per cell).
+
 ## Limits and what the models must not be used for
 
 - Probabilities are for draft prep and simulation, not betting; the outcome model is essentially an Elo model.

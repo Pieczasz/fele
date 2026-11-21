@@ -24,6 +24,9 @@ export type SeriesRequest = Schemas['SeriesRequest']
 export type SeriesPlan = Schemas['SeriesPlan']
 export type SeriesOut = Schemas['SeriesOut']
 export type Card = Schemas['Card']
+export type LiveState = Schemas['LiveState']
+export type LiveAlly = Schemas['LiveAlly']
+export type ChampRef = Schemas['ChampRef']
 
 /** The hosted demo is password protected and this browser has no session yet. */
 export class LoginRequiredError extends Error {
@@ -84,6 +87,7 @@ export const api = {
   preferences: () => get<Preferences>('/preferences'),
   champions: () => get<ChampionInfo[]>('/champions'),
   cards: (teamId: string) => get<Card[]>(`/teams/${encodeURIComponent(teamId)}/cards`),
+  live: () => get<LiveState>('/lcu/state'),
   recommend: (body: DraftRequest) => post<DraftAdvice>('/draft/recommend', body),
   simulate: (body: SeriesRequest) => post<SeriesPlan>('/series/simulate', body),
   login: (password: string) =>

@@ -285,3 +285,25 @@ One entry per phase of [AGENT_PLAN.md](AGENT_PLAN.md): what was asked, what the 
 - **Caught along the way:** the synthetic tests found that `/draft/recommend` silently accepted unknown champion
   names (a typo was drafted as an empty slot). It now returns a 422.
 - **Human corrections:** _(none yet)_
+
+### fele Live: League client companion (2026-11-21)
+
+- **Asked:** make fele better instead of calling it finished: detect the League client on macOS, see the user and
+  their friends in champ select, fetch their past games, and recommend picks within 10 s; plus UX, E2E tests and
+  AI-enabled features.
+- **Agent did first:** checked Riot's policies before writing code. The LCU is allowed but unsupported; Ranked
+  Solo/Duo forbids names or stats of non-party allies. fele applies a stricter rule in every queue (only you and your
+  party), and the compliance notes were rewritten before any client code.
+- **Agent produced:**
+  - `fele.lcu`: lockfile/process discovery, a typed client (pydantic payload models with safe defaults), a pure
+    champ-select parser that reads the draft order from the client, a 1-second watcher that prefetches party history
+    in the lobby, `/lcu/state`, and the `/live` page;
+  - a champ-select scorer with no GRID data, checked on 4,845 high-elo player-games: 63% top-5 vs 59% for "most
+    played" and 29% for meta alone;
+  - `fele lcu-fake` (a scripted client for demos and tests) and `fele lcu-capture` (anonymised recordings of the real
+    client for parser checks).
+- **Caught along the way (browser check against the fake client):** advice kept offering picks after the user had
+  locked in; during simultaneous solo-queue bans it advised the first ally instead of the user; and it suggested
+  banning a friend's main champion. All three are fixed and tested.
+- **Human corrections:** _(none yet)_
+

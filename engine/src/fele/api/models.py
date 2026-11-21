@@ -309,3 +309,70 @@ class Card(BaseModel):
     evidence: str  # e.g. "6/10 game 1s", "n=113, league 66%"
     strength: Literal["strong", "weak", "model", "descriptive"]
     champions: list[str] = []  # GRID names, for icons
+
+
+# --- fele Live (League client) -------------------------------------------------------------------------------------
+class ChampRef(BaseModel):
+    id: int
+    name: str
+    key: str | None
+
+
+class PoolChamp(BaseModel):
+    champion: ChampRef
+    games: int
+    wins: int
+    last_played: datetime | None
+
+
+class LiveAlly(BaseModel):
+    cell: int
+    position: str | None
+    champion: ChampRef | None
+    intent: ChampRef | None
+    name: str | None  # Riot ID: only the local player and party members (docs/COMPLIANCE.md)
+    me: bool
+    games: int  # recent games read from the client (0 = not visible or not loaded yet)
+    pool: list[PoolChamp]
+
+
+class LiveAction(BaseModel):
+    cell: int
+    kind: Literal["ban", "pick"]
+    ally: bool
+    champion: ChampRef | None
+    completed: bool
+    in_progress: bool
+
+
+class LiveChampSelect(BaseModel):
+    queue: int
+    queue_name: str
+    custom: bool
+    phase: str
+    time_left_s: float
+    allies: list[LiveAlly]
+    enemy_picks: list[ChampRef]
+    ally_bans: list[ChampRef]
+    enemy_bans: list[ChampRef]
+    actions: list[LiveAction]
+
+
+class LiveAdvice(BaseModel):
+    kind: Literal["ban", "pick"]
+    for_cell: int
+    for_name: str | None  # whose pick: you, a party member, or None for a non-party ally
+    options: list[OptionOut]
+    note: str
+
+
+class LiveState(BaseModel):
+    enabled: bool  # the server watches the client (fele serve --lcu)
+    connected: bool
+    phase: str | None
+    me: str | None
+    party: list[str]  # Riot IDs of the lobby party
+    champ_select: LiveChampSelect | None
+    advice: LiveAdvice | None
+    sample: str  # solo-queue sample behind the advice, e.g. "16.22–16.23, 1807 high-elo games"
+    version: int

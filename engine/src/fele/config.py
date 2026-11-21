@@ -19,6 +19,7 @@ class Settings(BaseSettings):
         default=None, validation_alias=AliasChoices("RIOT_DEVELOPER_PLATFORM_API_KEY", "RIOT_API_KEY")
     )
     demo_password: SecretStr | None = None
+    fele_lcu: bool = False  # watch the local League client (fele serve --lcu)
 
     @property
     def lol_dir(self) -> Path:

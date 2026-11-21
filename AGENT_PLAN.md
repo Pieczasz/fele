@@ -92,7 +92,8 @@ Do not ask the agent to run several phases in one go. Every phase ends with a **
 - Riot API (developer.riotgames.com): development key (rate-limited, expires every 24 h); personal key for small projects; production key for public products. Relevant endpoints: `account-v1` (Riot ID ↔ PUUID), `match-v5` (match IDs by PUUID, match details, timelines), `league-v4` (Challenger/Grandmaster/Master ladders).
 - Policies relevant to us: no data-broker apps; API key never in code; must post Riot's legal boilerplate ("not endorsed by Riot Games…" — copy exact text from developer.riotgames.com/docs/lol); products should increase decision diversity and **not remove decisions** (highlight + multiple choices); **no MMR/Elo calculators that replace official ranking**; **cannot identify or analyze players deliberately hidden by the game**; register a product that serves players.
 - Data Dragon: free static data + images per patch (champions, items, runes, summoner spells). Latest version at time of writing: 16.23.1 → **pro data in GRID ends at 16.17, ~6 patches behind the live client.** This is why we need current-patch signals from solo queue.
-- League Client API (LCU) exists but is officially unsupported → not used in this project.
+- League Client API (LCU) exists but is officially unsupported. Revised 2026-11-21: used locally only for fele Live
+  (champ select in the user's own games and scrims), under the conditions in docs/COMPLIANCE.md.
 - Since 2026-10-06 Riot blocks game-memory access for unknown third-party apps → no memory reading of any kind.
 
 ### 2.4 Other sources (status must be confirmed in Phase 0)
@@ -416,6 +417,9 @@ honest results), `docs/VIDEO_SCRIPT.md`, the live context slimmed to the state t
 per-game draft rows), CI gates for dead code and vulnerable dependencies, a synthetic draft world so CI tests the
 engine end to end. Waiting on the human: hosting choice and the organizer question on hosted aggregates
 (COMPLIANCE §4), screenshots (they show GRID-derived numbers), recording the video.
+
+**2026-11-21: scope extended by the human** (plan: fele Live via the League client, UX pass, E2E tests, AI features;
+details in docs/COMPLIANCE.md and AI_SHOWCASE.md). Milestone 1 (fele Live for the user's own champ select) done.
 
 **🛑 Checkpoint:** human submits on Devpost by 2027-01-09.
 

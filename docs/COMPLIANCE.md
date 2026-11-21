@@ -18,6 +18,8 @@ Only sources marked ✅ or ⚠️ (with their conditions met) may be used (AGENT
 | **Riot Games Open Access powered by GRID** (launched mid-Nov 2026) | Possibly Worlds 2026 in the same GRID format | ❓ | Terms only visible after sign-up at riot.grid.gg — human must register and read them |
 | **Oracle's Elixir** | Per-player pro stats CSVs 2014–2026 | ⚠️ | No formal license; local use, credit; ask the author before committing anything derived |
 | **CommunityDragon** | Gap-filling static assets only | ⚠️ | Unofficial; prefer Data Dragon |
+| **League Client API (LCU)**, local | fele Live: champ select in the user's own games, scrim drafts, party members' recent games from the client's match history | ⚠️ | Unsupported by Riot; local only (127.0.0.1, the user's own fele); identities and stats only for the user and lobby party members, other allies shown as "Ally", enemies never analysed; ranked options with reasons, never one pick; note LCU use on the Developer Portal product ([research §10](research/riot-platform.md)) |
+| **Anthropic API** (Ask fele, opt-in) | Natural-language answers over fele's own aggregates | ⚠️ | Off unless `ANTHROPIC_API_KEY` is set; sends aggregates only (stats tables, model outputs), never raw GRID events or Riot match JSON; the API does not train on inputs by default; decision by the human 2026-11-21, pending the organizer question below |
 | **Coach preferences** (`config/preferences.yaml`) | Comfort tiers, refused picks, prio players, save lists | ✅ | Our own input; real file gitignored |
 | OP.GG MCP, MetaBot.GG MCP | Current-patch stats | ❓ | Terms forbid/limit automated collection — not used unless the organizers or vendors approve |
 | u.gg, lolalytics, Mobalytics, League of Graphs, DPM.LOL, METAsrc, Blitz, gol.gg, TrackingThePros, LoLPros | — | ❌ | No public API, so access would mean scraping |
@@ -60,7 +62,8 @@ Send via Cloud9 Discord office hours (discord.gg/cloud9) or the Devpost "Email t
 > 2. **Combining data (GRID license §3(e)):** we'd like to show Cloud9 players' recent solo-queue champion pools, from Riot IDs entered manually by the coach, next to their GRID pro champion pools. Is that acceptable, or should solo-queue data stay champion-level only?
 > 3. **External pro data:** may we combine GRID with Leaguepedia (CC BY-SA) pick/ban data for leagues GRID doesn't cover (LPL, internationals)? And is "Riot Games Open Access powered by GRID" data allowed in submissions?
 > 4. **Video:** are Data Dragon champion icons fine, and may we show the Cloud9/LCS names (no logos)?
-> 5. **Bonus prize:** does an `AI_SHOWCASE.md` covering JetBrains Air + Junie + Claude qualify for Best AI-Powered Workflow Story?
+> 5. **LLM features:** may a local tool send GRID-derived *aggregates* (pick/ban rates, model outputs) to an LLM API (Anthropic, no training on inputs) to answer a coach's questions?
+> 6. **Bonus prize:** does an `AI_SHOWCASE.md` covering JetBrains Air + Junie + Claude qualify for Best AI-Powered Workflow Story?
 
 ## 5. Human to-dos
 
@@ -71,5 +74,6 @@ Send via Cloud9 Discord office hours (discord.gg/cloud9) or the Devpost "Email t
    pending (2026-11-19). Meanwhile the dev key in `.env` is regenerated daily.
 4. Optionally register for Riot Games Open Access (riot.grid.gg) and read its terms.
 5. Create a Leaguepedia bot password only if we decide to use the Cargo API directly.
-6. After judging ends (2027-02-03): delete the hosted demo's model artifacts and aggregates, and `data_local/models/`
+6. Add "uses the League Client API (champ select, local only)" to the registered Riot product.
+7. After judging ends (2027-02-03): delete the hosted demo's model artifacts and aggregates, and `data_local/models/`
    locally (GRID licence: no ML model that outlives the hackathon).

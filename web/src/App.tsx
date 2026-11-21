@@ -7,6 +7,7 @@ import { Login } from './components/Login.tsx'
 import { CoachPage } from './pages/CoachPage.tsx'
 import { CoveragePage } from './pages/CoveragePage.tsx'
 import { DraftPage } from './pages/DraftPage.tsx'
+import { LivePage } from './pages/LivePage.tsx'
 import { MacroPage } from './pages/MacroPage.tsx'
 import { MetaPage } from './pages/MetaPage.tsx'
 import { PlannerPage } from './pages/PlannerPage.tsx'
@@ -20,6 +21,7 @@ const NAV = [
   ['/', 'Teams'],
   ['/planner', 'Series plan'],
   ['/draft', 'Mock draft'],
+  ['/live', 'Live'],
   ['/meta', 'Meta'],
   ['/coach', 'Coach'],
   ['/coverage', 'Data'],
@@ -90,6 +92,7 @@ export function App() {
             </Route>
             <Route path="/planner" element={<PlannerPage />} />
             <Route path="/draft" element={<DraftPage />} />
+            <Route path="/live" element={<LivePage />} />
             <Route path="/coach" element={<CoachPage />} />
             <Route path="/meta" element={<MetaPage />} />
             <Route path="/coverage" element={<CoveragePage />} />

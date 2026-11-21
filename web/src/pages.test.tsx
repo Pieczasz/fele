@@ -131,3 +131,81 @@ it('coverage page: games per league and the solo-queue sample', async () => {
   expect(await screen.findByRole('heading', { name: 'Pro games by league' })).toBeInTheDocument() // data loaded
   expect(screen.getByText('Patch 16.23')).toBeInTheDocument()
 })
+
+const CHAMP = (id: number, name: string) => ({ id, name, key: name })
+const LIVE_BASE = {
+  enabled: true,
+  connected: true,
+  me: 'Me#EUW',
+  party: ['Me#EUW', 'Friend#EUW'],
+  sample: '16.23, 1000 high-elo games',
+  version: 3,
+}
+
+it('live page: explains how to start when the client watch is off', async () => {
+  ROUTES['/lcu/state'] = {
+    ...LIVE_BASE,
+    enabled: false,
+    connected: false,
+    phase: null,
+    champ_select: null,
+    advice: null,
+  }
+  renderAt('/live')
+  expect(await screen.findByRole('heading', { name: 'fele Live is off' })).toBeInTheDocument()
+  expect(screen.getByText('cd engine && uv run fele serve --lcu')).toBeInTheDocument()
+})
+
+it('live page: champ select with party names, anonymous allies and ranked options', async () => {
+  const ally = (cell: number, position: string, name: string | null, me = false) => ({
+    cell,
+    position,
+    champion: null,
+    intent: null,
+    name,
+    me,
+    games: name ? 20 : 0,
+    pool: name ? [{ champion: CHAMP(103, 'Ahri'), games: 6, wins: 4, last_played: null }] : [],
+  })
+  ROUTES['/lcu/state'] = {
+    ...LIVE_BASE,
+    phase: 'ChampSelect',
+    champ_select: {
+      queue: 440,
+      queue_name: 'Ranked Flex',
+      custom: false,
+      phase: 'BAN_PICK',
+      time_left_s: 21.4,
+      allies: [ally(0, 'top', null), ally(1, 'jungle', 'Friend#EUW'), ally(2, 'mid', 'Me#EUW', true)],
+      enemy_picks: [CHAMP(238, 'Zed')],
+      ally_bans: [],
+      enemy_bans: [],
+      actions: [{ cell: 2, kind: 'pick', ally: true, champion: null, completed: false, in_progress: true }],
+    },
+    advice: {
+      kind: 'pick',
+      for_cell: 2,
+      for_name: 'you',
+      note: 'Options, not orders.',
+      options: [
+        {
+          champion: 'Ahri',
+          key: 'Ahri',
+          role: 'mid',
+          score: 2,
+          parts: {},
+          reasons: ['you: 6 of the last 20 games on it'],
+          win_prob: null,
+        },
+      ],
+    },
+  }
+  renderAt('/live')
+  expect(await screen.findByRole('heading', { name: 'Pick options for you' })).toBeInTheDocument()
+  expect(screen.getByText('Ally')).toBeInTheDocument() // non-party teammate: no name
+  expect(screen.getByText('Friend')).toBeInTheDocument()
+  expect(screen.getByText('picking now')).toBeInTheDocument()
+  expect(screen.getByText('you: 6 of the last 20 games on it')).toBeInTheDocument()
+  expect(screen.getByText('Zed')).toBeInTheDocument()
+  expect(screen.getByText('21 s left')).toBeInTheDocument()
+})

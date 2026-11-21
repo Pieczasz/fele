@@ -208,3 +208,19 @@ Cards only restate numbers computed elsewhere, each with its evidence count and 
 
 The series planner and mock draft run in the browser on top of `/draft/recommend` and `/series/simulate`; the plan
 and coach inputs live in `localStorage` and can be exported as JSON (plan also as CSV).
+
+## fele Live: champ select in the user's own games (`engine/src/fele/lcu/`, `engine/solo.py`)
+
+- **Connection:** the League client's lockfile (macOS `/Applications/League of Legends.app/Contents/LoL/lockfile`,
+  Windows default, or the client process's arguments) gives a port and a session password for `https://127.0.0.1`.
+  The API polls it once a second (`fele serve --lcu`); nothing else listens or sends.
+- **Draft order:** read from the client's own `actions`, so solo/duo's simultaneous bans, flex and Clash all work.
+- **Privacy:** identities and stats only for the local player and lobby party members, in every queue (stricter
+  than Riot's Ranked Solo/Duo rule); other allies are "Ally"; the enemy team is never identified.
+- **Player pools:** the last 40 Summoner's Rift games of each visible player from the client's match history (no Riot
+  key needed), prefetched in the lobby; champion win rates shrunk toward the player's own rate (10 pseudo-games),
+  games weighted with a 30-day half-life.
+- **Scoring:** see [MODEL_CARD.md](MODEL_CARD.md#champ-select-scorer-fele-live-2026-11-21). Bans never target what a
+  teammate shows or a party member's three best champions; a "counter" needs a 2-point shrunk lane edge.
+- **Latency:** scoring takes about a millisecond; advice is recomputed only when the draft or a pool changes.
+

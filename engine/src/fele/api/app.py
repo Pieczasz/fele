@@ -3,6 +3,9 @@
 Interactive docs are generated from the code: Swagger UI at /docs, ReDoc at /redoc, spec at /openapi.json.
 """
 
+import asyncio
+import contextlib
+from collections.abc import AsyncGenerator
 from datetime import timedelta
 from typing import TYPE_CHECKING, Annotated, Any, Literal
 
@@ -15,10 +18,12 @@ from pydantic import BaseModel
 from fele import prefs
 from fele.api import auth, models
 from fele.api.data import MissingDataError, champion_keys, ddragon_version, table
+from fele.config import settings
 from fele.static.ddragon import live_patch
 
 if TYPE_CHECKING:
     from fele.engine.live import Live
+    from fele.lcu.watch import Watcher
 
 DESCRIPTION = """
 **fele** (short for *Fearless Ledger*) — draft prep and Fearless series planning for League of Legends coaches.
@@ -31,7 +36,26 @@ PLAYER_TOP = 8  # champions per player
 CURRENT_WINDOW = timedelta(days=7)  # a player is "current" if they played within a week of the team's last game
 META_MIN_PRESENCE = 1  # meta rows need at least one pick/ban in the window or a solo-queue sample
 
+
+@contextlib.asynccontextmanager
+async def lifespan(api: FastAPI) -> AsyncGenerator[None]:
+    """With FELE_LCU=1 (`fele serve --lcu`), watch the local League client in the background."""
+    task = None
+    api.state.watcher = None
+    if settings().fele_lcu:
+        from fele.lcu.watch import Watcher  # noqa: PLC0415 - only when enabled
+
+        api.state.watcher = Watcher()
+        task = asyncio.create_task(api.state.watcher.run())
+    yield
+    if task:
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+
+
 app = FastAPI(
+    lifespan=lifespan,
     title="fele API",
     version="0.2.0",
     description=DESCRIPTION,
@@ -45,6 +69,7 @@ app = FastAPI(
             "description": "Draft recommendations, live win probability and the Fearless series simulator.",
         },
         {"name": "coach", "description": "Coach and player preferences (comfort picks, prio players, save lists)."},
+        {"name": "live", "description": "fele Live: champ select from the local League client (fele serve --lcu)."},
     ],
 )
 app.add_middleware(
@@ -548,8 +573,8 @@ def draft_recommend(req: models.DraftRequest) -> models.DraftAdvice:
         ],
         likely=likely,
         win_prob=models.WinProb(mean=mean, p10=p10, p90=p90),
-        our_comp=comp_out(comp.analyze(live, s.picks(US))),
-        their_comp=comp_out(comp.analyze(live, s.picks(THEM))),
+        our_comp=comp_out(comp.analyze(live.tags, s.picks(US))),
+        their_comp=comp_out(comp.analyze(live.tags, s.picks(THEM))),
     )
 
 
@@ -607,3 +632,24 @@ def series_simulate(req: models.SeriesRequest) -> models.SeriesPlan:
 def preferences() -> prefs.Preferences:
     """Coach input from `config/preferences.yaml`, falling back to the example file."""
     return prefs.load()
+
+
+# --- fele Live (local League client) --------------------------------------------------------------------------------
+class _AdviceCache:
+    version = -1
+    advice: models.LiveAdvice | None = None
+
+
+@app.get("/lcu/state", tags=["live"], summary="League client status, champ select and advice")
+async def lcu_state(request: Request) -> models.LiveState:
+    """What the local client shows now (party members by name, other allies as "Ally", enemies hidden), with ranked
+    options for the action in progress. Advice is recomputed only when the draft or a party pool changes."""
+    from fele.engine.solo import load_solo  # noqa: PLC0415 - heavy modules only when used
+    from fele.lcu import view  # noqa: PLC0415
+
+    watcher: Watcher | None = getattr(request.app.state, "watcher", None)
+    data = load_solo()
+    cs = watcher.snapshot.champ_select if watcher else None
+    if watcher and cs and _AdviceCache.version != watcher.version:
+        _AdviceCache.advice, _AdviceCache.version = view.advice(data, cs, watcher), watcher.version
+    return view.live_state(data, watcher, _AdviceCache.advice)

@@ -6,7 +6,6 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from fele.engine.live import Live
 from fele.features import state
 
 SCALING = {0.0: "early", 1.0: "mid", 2.0: "late"}
@@ -22,8 +21,8 @@ class Comp:
     warnings: list[str] = field(default_factory=list[str])
 
 
-def analyze(live: Live, ours: list[str]) -> Comp:
-    tags = [live.tags[c] for c in ours if c in live.tags]
+def analyze(all_tags: dict[str, dict[str, float]], ours: list[str]) -> Comp:
+    tags = [all_tags[c] for c in ours if c in all_tags]
     if not tags:
         return Comp(ours, 0.5, "—", {}, "—")
     ap = float(np.mean([t["ap_share"] for t in tags]))
