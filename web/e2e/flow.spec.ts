@@ -3,6 +3,7 @@ import { mockApi } from './mockApi.ts'
 
 // mock-only: the opponent and champions exist in the fake API (playwright.config.ts skips this file with E2E_REAL=1)
 const FLYQUEST = /FlyQuest/u
+const AHRI = /^(?:Ban |Pick )?Ahri(?::.*)?$/u // the grid tile, whatever its state
 
 it.beforeEach(async ({ page }) => {
   await mockApi(page)
@@ -40,10 +41,10 @@ it('mock draft keeps its state across navigation', async ({ page }) => {
   await page.goto('/draft')
   await page.getByRole('combobox', { name: 'Who are we drafting against?' }).selectOption('fq')
   await page.getByRole('button', { name: 'Skip this ban' }).click()
-  await page.getByRole('button', { name: 'Ahri', exact: true }).click()
+  await page.getByRole('button', { name: AHRI }).click()
   await page.getByRole('link', { name: 'Meta' }).click()
   await page.getByRole('link', { name: 'Mock draft' }).click()
-  await expect(page.getByRole('button', { name: 'Ahri', exact: true })).toBeDisabled()
+  await expect(page.getByRole('button', { name: AHRI })).toBeDisabled()
 })
 
 it('fele Live shows champ select with party names and options', async ({ page }) => {

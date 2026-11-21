@@ -18,6 +18,13 @@ function matches(c: ChampionInfo, query: string, role: RoleFilter): boolean {
   return (role === 'all' || c.roles.includes(role)) && matchesChampion(c.name, query)
 }
 
+function tileLabel(verb: string, name: string, game: number | undefined, taken: boolean): string {
+  if (game !== undefined) {
+    return `${name}: locked, picked in game ${game} (Fearless)`
+  }
+  return taken ? `${name}: already taken this game` : `${verb} ${name}`
+}
+
 /**
  * Searchable champion grid. Taken champions (this game) and Fearless-locked ones (earlier games, with the game number)
  * are greyed out and can't be chosen. Enter in the search box picks the first available match.
@@ -28,12 +35,14 @@ export function ChampionGrid({
   locked,
   onPick,
   searchId,
+  verb = 'Pick',
 }: {
   champions: ChampionInfo[]
   taken: Set<string>
   locked: Map<string, number>
   onPick: (name: string) => void
   searchId: string
+  verb?: 'Ban' | 'Pick'
 }) {
   const [query, setQuery] = useState('')
   const [role, setRole] = useState<RoleFilter>('all')
@@ -73,13 +82,17 @@ export function ChampionGrid({
                 type="button"
                 disabled={!free}
                 onClick={() => onPick(c.name)}
-                title={game === undefined ? c.name : `${c.name}: picked in game ${game} (Fearless)`}
-                className="relative flex w-full cursor-pointer flex-col items-center gap-0.5 rounded-md p-1 text-[11px] hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-35"
+                aria-label={tileLabel(verb, c.name, game, taken.has(c.name))}
+                className="relative flex w-full cursor-pointer flex-col items-center gap-0.5 rounded-md p-1 text-xs hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <ChampionIcon championKey={c.key} size={40} />
-                <span className="w-full truncate text-center">{c.name}</span>
+                <span className={`w-full truncate text-center ${taken.has(c.name) ? 'line-through' : ''}`}>
+                  {c.name}
+                </span>
                 {game === undefined ? null : (
-                  <span className="absolute top-0.5 right-0.5 rounded bg-ink px-1 text-[10px] text-bg">G{game}</span>
+                  <span aria-hidden="true" className="absolute top-0.5 right-0.5 rounded bg-ink px-1 text-xs text-bg">
+                    G{game}
+                  </span>
                 )}
               </button>
             </li>

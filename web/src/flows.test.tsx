@@ -24,6 +24,7 @@ const PREFS: Preferences = {
   ],
   strategy: { save_for_late_games: [], must_ban_vs_opponent: {}, never_pick: [], style_tags: [] },
 }
+const AHRI = /^(?:Ban |Pick )?Ahri(?::.*)?$/u // the grid tile, whatever its state
 const DECIDED = /The series is already decided \(2–0\)/u
 const CHAMPS = ['Ahri', 'Azir', 'Vi', 'Jinx', 'Nocturne'].map((name) => ({ name, key: name, roles: ['mid'] }))
 const comp = {
@@ -113,13 +114,13 @@ it('mock draft: shows options with reasons, applies a click and the 1 key', asyn
   renderAt('/draft')
   expect(await screen.findByText('they pick it 17% of the time at their next pick (model)')).toBeInTheDocument()
   expect(screen.getByText('Our win probability 60%')).toBeInTheDocument()
-  fireEvent.click(screen.getByRole('button', { name: 'Ahri' }))
+  fireEvent.click(screen.getByRole('button', { name: AHRI }))
   await waitFor(() => expect(calls.at(-1)?.body).toMatchObject({ actions: ['Ahri'], them: 'fq' }))
   await waitFor(() => expect(document.querySelector('[aria-busy="false"]')).not.toBeNull()) // fresh advice
   fireEvent.keyDown(globalThis.window, { key: '1', ctrlKey: true }) // browser shortcut: ignored
   fireEvent.keyDown(globalThis.window, { key: '1' })
   await waitFor(() => expect(calls.at(-1)?.body).toMatchObject({ actions: ['Ahri', 'Nocturne'] }))
-  expect(screen.getByRole('button', { name: 'Ahri' })).toBeDisabled() // taken this game
+  expect(screen.getByRole('button', { name: AHRI })).toBeDisabled() // taken this game
 })
 
 it('planner: shows Fearless locks and remaining pools from the saved plan', async () => {
@@ -169,19 +170,19 @@ it('mock draft: the draft survives leaving the page, skip and reset work, sides 
   const calls = fakeApi()
   const first = renderAt('/draft')
   fireEvent.click(await screen.findByRole('button', { name: 'Skip this ban S' }))
-  fireEvent.click(await screen.findByRole('button', { name: 'Ahri' }))
+  fireEvent.click(await screen.findByRole('button', { name: AHRI }))
   await waitFor(() => expect(calls.at(-1)?.body).toMatchObject({ actions: ['', 'Ahri'] }))
   expect(screen.getByRole('button', { name: 'We are red' })).toBeDisabled()
   first.unmount()
   renderAt('/draft') // back on the page: same draft
   await waitFor(() => expect(calls.at(-1)?.body).toMatchObject({ actions: ['', 'Ahri'] }))
-  expect(await screen.findByRole('button', { name: 'Ahri' })).toBeDisabled()
+  expect(await screen.findByRole('button', { name: AHRI })).toBeDisabled()
   vi.stubGlobal('confirm', () => false)
   fireEvent.click(screen.getByRole('button', { name: 'Reset' }))
-  expect(screen.getByRole('button', { name: 'Ahri' })).toBeDisabled() // declined: nothing cleared
+  expect(screen.getByRole('button', { name: AHRI })).toBeDisabled() // declined: nothing cleared
   vi.stubGlobal('confirm', () => true)
   fireEvent.click(screen.getByRole('button', { name: 'Reset' }))
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Ahri' })).toBeEnabled())
+  await waitFor(() => expect(screen.getByRole('button', { name: AHRI })).toBeEnabled())
 })
 
 it('mock draft: choose the opponent on the page when no series is planned', async () => {

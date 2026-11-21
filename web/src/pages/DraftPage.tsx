@@ -93,6 +93,83 @@ function ChampionsPanel({
   return <ChampionGrid champions={champions.list} {...grid} />
 }
 
+/** Undo / skip / reset, and saving a finished draft into the series (unless the series is already decided). */
+function DraftControls({
+  count,
+  series,
+  onUndo,
+  onSkip,
+  onReset,
+  onRecord,
+}: {
+  count: number
+  series: ReturnType<typeof seriesScore>
+  onUndo: () => void
+  onSkip: () => void
+  onReset: () => void
+  onRecord: (result: PlannedGame['result']) => void
+}) {
+  const done = count >= TEMPLATE.length
+  return (
+    <div className="flex flex-wrap gap-2">
+      <button
+        type="button"
+        onClick={onUndo}
+        disabled={count === 0}
+        className="min-h-9 cursor-pointer rounded-md border border-line px-3 text-sm disabled:opacity-40"
+      >
+        Undo
+      </button>
+      {!done && kind(count) === 'ban' ? (
+        <button
+          type="button"
+          onClick={onSkip}
+          className="min-h-9 cursor-pointer rounded-md border border-line px-3 text-sm"
+        >
+          Skip this ban <kbd className="text-xs text-muted">S</kbd>
+        </button>
+      ) : null}
+      <button
+        type="button"
+        onClick={onReset}
+        className="min-h-9 cursor-pointer rounded-md border border-line px-3 text-sm"
+      >
+        Reset
+      </button>
+      {count > 0 && !done ? (
+        <span className="self-center text-xs text-muted">Sides are fixed once the draft starts (Reset to change).</span>
+      ) : null}
+      {done && series.over ? (
+        <p className="self-center text-sm text-muted">
+          The series is already decided ({series.wins}–{series.losses}). Start a new one in the{' '}
+          <Link to="/planner" className="text-primary underline">
+            planner
+          </Link>
+          .
+        </p>
+      ) : null}
+      {done && !series.over ? (
+        <>
+          <button
+            type="button"
+            onClick={() => onRecord('won')}
+            className="min-h-9 cursor-pointer rounded-md bg-primary px-3 text-sm font-medium text-bg"
+          >
+            Save to series as a win
+          </button>
+          <button
+            type="button"
+            onClick={() => onRecord('lost')}
+            className="min-h-9 cursor-pointer rounded-md border border-primary px-3 text-sm"
+          >
+            Save as a loss
+          </button>
+        </>
+      ) : null}
+    </div>
+  )
+}
+
 export function DraftPage() {
   const teams = useQuery({ queryKey: ['teams'], queryFn: api.teams })
   const champions = useChampions()
@@ -120,7 +197,6 @@ export function DraftPage() {
   const us = prefs?.team ?? 'Cloud9 Kia'
   const opponent = teams.data?.find((t) => t.team_id === plan.opponent)
   const wePickFirst = first === 'us'
-  const done = actions.length >= TEMPLATE.length
 
   const score = played.reduce((s, g) => s + (g.result === 'won' ? 1 : 0) - (g.result === 'lost' ? 1 : 0), 0)
   const body: DraftRequest = {
@@ -260,64 +336,14 @@ export function DraftPage() {
         theirName={opponent?.name ?? plan.opponent}
         byName={champions.byName}
       />
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={undo}
-          disabled={actions.length === 0}
-          className="min-h-9 cursor-pointer rounded-md border border-line px-3 text-sm disabled:opacity-40"
-        >
-          Undo
-        </button>
-        {!done && kind(actions.length) === 'ban' ? (
-          <button
-            type="button"
-            onClick={() => append('')}
-            className="min-h-9 cursor-pointer rounded-md border border-line px-3 text-sm"
-          >
-            Skip this ban <kbd className="text-xs text-muted">S</kbd>
-          </button>
-        ) : null}
-        <button
-          type="button"
-          onClick={reset}
-          className="min-h-9 cursor-pointer rounded-md border border-line px-3 text-sm"
-        >
-          Reset
-        </button>
-        {actions.length > 0 && !done ? (
-          <span className="self-center text-xs text-muted">
-            Sides are fixed once the draft starts (Reset to change).
-          </span>
-        ) : null}
-        {done && series.over ? (
-          <p className="self-center text-sm text-muted">
-            The series is already decided ({series.wins}–{series.losses}). Start a new one in the{' '}
-            <Link to="/planner" className="text-primary underline">
-              planner
-            </Link>
-            .
-          </p>
-        ) : null}
-        {done && !series.over ? (
-          <>
-            <button
-              type="button"
-              onClick={() => record('won')}
-              className="min-h-9 cursor-pointer rounded-md bg-primary px-3 text-sm font-medium text-bg"
-            >
-              Save to series as a win
-            </button>
-            <button
-              type="button"
-              onClick={() => record('lost')}
-              className="min-h-9 cursor-pointer rounded-md border border-primary px-3 text-sm"
-            >
-              Save as a loss
-            </button>
-          </>
-        ) : null}
-      </div>
+      <DraftControls
+        count={actions.length}
+        series={series}
+        onUndo={undo}
+        onSkip={() => append('')}
+        onReset={reset}
+        onRecord={record}
+      />
       <div className="grid gap-5 lg:grid-cols-[1fr_24rem]">
         <ChampionsPanel
           champions={champions}
@@ -325,8 +351,9 @@ export function DraftPage() {
           locked={locked}
           onPick={append}
           searchId={searchId}
+          verb={kind(actions.length) === 'ban' ? 'Ban' : 'Pick'}
         />
-        <aside className="lg:sticky lg:top-4 lg:self-start">
+        <aside className="order-first lg:sticky lg:top-4 lg:order-none lg:self-start">
           {advice.isError ? (
             <p role="alert" className="text-bad">
               {advice.error.message}
