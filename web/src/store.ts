@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react'
+import { type Dispatch, type SetStateAction, useEffect, useState } from 'react'
 
 /**
  * State kept in this browser only (coach edits, series plans): per user, never shared. Storage can be missing or
  * blocked (private mode), so reads and writes fall back to memory.
  */
-export function useLocalState<T>(key: string, initial: T): [T, (v: T) => void] {
+export function useLocalState<T>(key: string, initial: T): [T, Dispatch<SetStateAction<T>>] {
   const [value, setValue] = useState<T>(() => {
     try {
       const raw = localStorage.getItem(key)

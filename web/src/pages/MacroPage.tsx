@@ -89,7 +89,7 @@ function Report({ data }: { data: Macro }) {
         hint="Amber tick = league average · positions are event snapshots, not tracking"
       >
         <div className="mb-3">
-          <Segmented label="Side" options={SPLITS} value={split} onChange={setSplit} />
+          <Segmented label="Early-game rates: side" options={SPLITS} value={split} onChange={setSplit} />
         </div>
         <table className="w-full text-sm">
           <caption className="sr-only">Early game rates compared with the league</caption>
@@ -134,7 +134,7 @@ function Report({ data }: { data: Macro }) {
         </Section>
         <Section title="Where the first 15 minutes are fought" hint={<NBadge n={sideGames} />}>
           <div className="mb-3 flex flex-wrap gap-3">
-            <Segmented label="Side" options={SIDES} value={side} onChange={setSide} />
+            <Segmented label="Heatmap: side" options={SIDES} value={side} onChange={setSide} />
             <Segmented label="Kills or deaths" options={KINDS} value={kind} onChange={setKind} />
           </div>
           <Heatmap

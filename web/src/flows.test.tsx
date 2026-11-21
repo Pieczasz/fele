@@ -24,6 +24,7 @@ const PREFS: Preferences = {
   ],
   strategy: { save_for_late_games: [], must_ban_vs_opponent: {}, never_pick: [], style_tags: [] },
 }
+const DECIDED = /The series is already decided \(2–0\)/u
 const CHAMPS = ['Ahri', 'Azir', 'Vi', 'Jinx', 'Nocturne'].map((name) => ({ name, key: name, roles: ['mid'] }))
 const comp = {
   champions: [],
@@ -158,4 +159,77 @@ it('planner: a hand-entered game keeps slots in place and counts only once it ha
   expect(stored().result).toBeNull()
   expect(screen.getByText('Score 0–0 · next: game 1')).toBeInTheDocument() // planned games don't count
   expect(screen.getByText('Nothing locked yet.')).toBeInTheDocument()
+})
+
+it('mock draft: the draft survives leaving the page, skip and reset work, sides lock once started', async () => {
+  localStorage.setItem(
+    'fele-plan',
+    JSON.stringify({ opponent: 'fq', bestOf: 3, weStartBlue: true, games: [], save: {} }),
+  )
+  const calls = fakeApi()
+  const first = renderAt('/draft')
+  fireEvent.click(await screen.findByRole('button', { name: 'Skip this ban S' }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Ahri' }))
+  await waitFor(() => expect(calls.at(-1)?.body).toMatchObject({ actions: ['', 'Ahri'] }))
+  expect(screen.getByRole('button', { name: 'We are red' })).toBeDisabled()
+  first.unmount()
+  renderAt('/draft') // back on the page: same draft
+  await waitFor(() => expect(calls.at(-1)?.body).toMatchObject({ actions: ['', 'Ahri'] }))
+  expect(await screen.findByRole('button', { name: 'Ahri' })).toBeDisabled()
+  vi.stubGlobal('confirm', () => false)
+  fireEvent.click(screen.getByRole('button', { name: 'Reset' }))
+  expect(screen.getByRole('button', { name: 'Ahri' })).toBeDisabled() // declined: nothing cleared
+  vi.stubGlobal('confirm', () => true)
+  fireEvent.click(screen.getByRole('button', { name: 'Reset' }))
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Ahri' })).toBeEnabled())
+})
+
+it('mock draft: choose the opponent on the page when no series is planned', async () => {
+  fakeApi()
+  renderAt('/draft')
+  const select = await screen.findByRole('combobox', { name: 'Who are we drafting against?' })
+  await screen.findByRole('option', { name: 'FlyQuest (LCS)' })
+  fireEvent.change(select, { target: { value: 'fq' } })
+  expect(await screen.findByRole('heading', { name: 'Mock draft: game 1 vs FlyQuest' })).toBeInTheDocument()
+})
+
+it('mock draft: a decided series cannot get another game', async () => {
+  const won = (id: string) => ({ id, ours: [], theirs: [], bans: [], result: 'won' })
+  localStorage.setItem(
+    'fele-plan',
+    JSON.stringify({ opponent: 'fq', bestOf: 3, weStartBlue: true, games: [won('a'), won('b')], save: {} }),
+  )
+  localStorage.setItem(
+    'fele-draft',
+    JSON.stringify({ key: 'fq:3', actions: Array.from({ length: 20 }, (_, i) => `C${i}`), side: 'blue', first: 'us' }),
+  )
+  fakeApi()
+  renderAt('/draft')
+  expect(await screen.findByText(DECIDED)).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Save to series as a win' })).not.toBeInTheDocument()
+})
+
+it('planner: a typed nickname snaps to the champion, an unknown name is flagged', async () => {
+  localStorage.setItem(
+    'fele-plan',
+    JSON.stringify({
+      opponent: 'fq',
+      bestOf: 3,
+      weStartBlue: true,
+      games: [{ id: 'g', ours: [], theirs: [], bans: [], result: null }],
+      save: {},
+    }),
+  )
+  fakeApi()
+  renderAt('/planner')
+  await screen.findByRole('option', { name: 'FlyQuest (LCS)' })
+  const slot = await screen.findByRole('combobox', { name: 'Game 1, our pick 1' })
+  await waitFor(() => expect(document.querySelectorAll('datalist option').length).toBeGreaterThan(0))
+  fireEvent.change(slot, { target: { value: 'noct' } })
+  fireEvent.blur(slot)
+  await waitFor(() => expect(slot).toHaveValue('Nocturne'))
+  const second = screen.getByRole('combobox', { name: 'Game 1, our pick 2' })
+  fireEvent.change(second, { target: { value: 'Nobody' } })
+  expect(second).toHaveAttribute('aria-invalid', 'true')
+  expect(screen.getByText('Unknown champion: not counted as locked')).toBeInTheDocument()
 })

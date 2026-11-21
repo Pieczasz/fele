@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
-import { useId, useState } from 'react'
-import { Link, Navigate, NavLink, Route, Routes } from 'react-router'
+import { useEffect, useId, useRef, useState } from 'react'
+import { Link, Navigate, NavLink, Route, Routes, useLocation } from 'react-router'
 import { api, LoginRequiredError } from './api/client.ts'
 import { Footer } from './components/Footer.tsx'
 import { Login } from './components/Login.tsx'
@@ -19,12 +19,12 @@ import { applyTheme, initialTheme, type Theme } from './theme.ts'
 
 const NAV = [
   ['/', 'Teams'],
-  ['/planner', 'Series plan'],
+  ['/planner', 'Series planner'],
   ['/draft', 'Mock draft'],
   ['/live', 'Live'],
   ['/meta', 'Meta'],
   ['/coach', 'Coach'],
-  ['/coverage', 'Data'],
+  ['/coverage', 'Data coverage'],
 ] as const
 
 function ThemeToggle() {
@@ -32,7 +32,6 @@ function ThemeToggle() {
   return (
     <button
       type="button"
-      aria-pressed={theme === 'dark'}
       onClick={() => {
         const next: Theme = theme === 'dark' ? 'light' : 'dark'
         applyTheme(next, true)
@@ -40,9 +39,41 @@ function ThemeToggle() {
       }}
       className="min-h-9 cursor-pointer rounded-md border border-line px-3 text-sm text-muted hover:text-ink"
     >
-      Dark theme
+      {theme === 'dark' ? 'Light theme' : 'Dark theme'}
     </button>
   )
+}
+
+function NotFound() {
+  return (
+    <div className="space-y-2">
+      <h1 className="text-2xl font-bold">Page not found</h1>
+      <p className="text-muted">
+        This address doesn't exist in fele.{' '}
+        <Link to="/" className="text-primary underline">
+          Back to the teams
+        </Link>
+      </p>
+    </div>
+  )
+}
+
+/** On every route change: name the page in the tab title and move focus to the main content (screen readers and
+ * keyboard users start at the new page, not at the link they clicked). */
+function RouteAnnouncer({ mainId }: { mainId: string }) {
+  const { pathname } = useLocation()
+  const first = useRef(true)
+  useEffect(() => {
+    const label = NAV.find(([to]) => to !== '/' && pathname.startsWith(to))?.[1]
+    const page = label ?? (pathname.startsWith('/teams/') ? 'Scouting report' : 'Teams')
+    document.title = `${page} · fele`
+    if (first.current) {
+      first.current = false // initial load: leave focus where the browser put it
+      return
+    }
+    document.querySelector<HTMLElement>(`#${CSS.escape(mainId)}`)?.focus()
+  }, [pathname, mainId])
+  return null
 }
 
 export function App() {
@@ -78,7 +109,8 @@ export function App() {
           </div>
         </div>
       </header>
-      <main id={mainId} className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6">
+      <RouteAnnouncer mainId={mainId} />
+      <main id={mainId} tabIndex={-1} className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 outline-none sm:px-6">
         {needsLogin ? (
           <Login />
         ) : (
@@ -96,7 +128,7 @@ export function App() {
             <Route path="/coach" element={<CoachPage />} />
             <Route path="/meta" element={<MetaPage />} />
             <Route path="/coverage" element={<CoveragePage />} />
-            <Route path="*" element={<p className="text-muted">Page not found.</p>} />
+            <Route path="*" element={<NotFound />} />
           </Routes>
         )}
       </main>

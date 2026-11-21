@@ -2,6 +2,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { type ChangeEvent, useId, useState } from 'react'
 import { Link } from 'react-router'
 import { api, type SeriesPlan, type SeriesRequest } from '../api/client.ts'
+import { resolveChampion } from '../champions.ts'
 import { Champion } from '../components/ChampionIcon.tsx'
 import { NBadge } from '../components/Evidence.tsx'
 import { Section } from '../components/QueryState.tsx'
@@ -11,6 +12,7 @@ import {
   EMPTY_PLAN,
   lockedBy,
   type PlannedGame,
+  parsePlan,
   playedGames,
   type SeriesPlanState,
   useChampions,
@@ -37,6 +39,49 @@ function toCsv(plan: SeriesPlanState): string {
   // a leading = + - @ would run as a formula in a spreadsheet: prefix it with ' (CSV injection)
   const cell = (v: string) => `"${(FORMULA_START.test(v) ? `'${v}` : v).replaceAll('"', '""')}"`
   return rows.map((r) => r.map(cell).join(',')).join('\n')
+}
+
+/** One pick slot: free typing with suggestions; on leaving the field the text snaps to the champion it names
+ * ("kaisa" → Kai'Sa, "mf" → Miss Fortune). Unknown names are marked and ignored by the Fearless locks. */
+function PickInput({
+  listId,
+  label,
+  value,
+  champions,
+  onChange,
+}: {
+  listId: string
+  label: string
+  value: string
+  champions: string[]
+  onChange: (v: string) => void
+}) {
+  const errorId = useId()
+  const invalid = value !== '' && champions.length > 0 && !champions.includes(value)
+  return (
+    <div>
+      <input
+        list={listId}
+        aria-label={label}
+        aria-invalid={invalid}
+        aria-describedby={invalid ? errorId : undefined}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={() => {
+          const name = resolveChampion(value, champions)
+          if (name && name !== value) {
+            onChange(name)
+          }
+        }}
+        className={`min-h-8 w-full rounded border bg-bg px-2 text-sm ${invalid ? 'border-bad' : 'border-line'}`}
+      />
+      {invalid ? (
+        <p id={errorId} className="text-xs text-bad">
+          Unknown champion: not counted as locked
+        </p>
+      ) : null}
+    </div>
+  )
 }
 
 function GameEditor({
@@ -97,13 +142,13 @@ function GameEditor({
           <fieldset key={team} className="space-y-1">
             <legend className="text-xs text-muted">{team === 'ours' ? 'Our picks' : 'Their picks'}</legend>
             {[0, 1, 2, 3, 4].map((slot) => (
-              <input
+              <PickInput
                 key={slot}
-                list={listId}
-                aria-label={`Game ${index + 1}, ${team === 'ours' ? 'our' : 'their'} pick ${slot + 1}`}
+                listId={listId}
+                label={`Game ${index + 1}, ${team === 'ours' ? 'our' : 'their'} pick ${slot + 1}`}
                 value={game[team][slot] ?? ''}
-                onChange={(e) => edit(team, slot, e.target.value)}
-                className="min-h-8 w-full rounded border border-line bg-bg px-2 text-sm"
+                champions={champions}
+                onChange={(v) => edit(team, slot, v)}
               />
             ))}
           </fieldset>
@@ -131,7 +176,12 @@ function Results({ data, keys }: { data: SeriesPlan; keys: string[] }) {
           {data.within_noise ? ' (within noise: no measurable effect on series odds)' : ''}
         </p>
       )}
-      <table className="w-full text-sm">
+      {keys.length === 0 ? (
+        <p className="text-sm text-muted">
+          Add champions to the save list (or comfort picks in Coach) to see when each is still available.
+        </p>
+      ) : null}
+      <table className={`w-full text-sm ${keys.length === 0 ? 'hidden' : ''}`}>
         <caption className="sr-only">Chance each champion is still available, by game</caption>
         <thead className="text-left text-xs text-muted">
           <tr>
@@ -173,12 +223,90 @@ function signedPct(x: number): string {
   return `${x >= 0 ? '+' : ''}${pct(x, 1)}`
 }
 
+function PlannerHeader({
+  plan,
+  setPlan,
+  sure,
+}: {
+  plan: SeriesPlanState
+  setPlan: (p: SeriesPlanState) => void
+  sure: (message: string) => boolean
+}) {
+  const [importError, setImportError] = useState('')
+  const importJson = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = '' // choosing the same file again still fires
+    if (!file) {
+      return
+    }
+    const parsed = parsePlan(await file.text())
+    if (typeof parsed === 'string') {
+      setImportError(parsed)
+    } else if (sure('Replace the current plan with the imported one?')) {
+      setImportError('')
+      setPlan(parsed)
+    }
+  }
+  return (
+    <>
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Fearless series planner</h1>
+          <p className="text-muted">
+            Plan the whole series: every champion picked is gone for the rest of it, for both teams.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2 text-sm">
+          <button
+            type="button"
+            onClick={() => download('fele-series-plan.json', JSON.stringify(plan, null, 2), 'application/json')}
+            className="min-h-9 cursor-pointer rounded-md border border-line px-3"
+          >
+            Export JSON
+          </button>
+          <button
+            type="button"
+            onClick={() => download('fele-series-plan.csv', toCsv(plan), 'text/csv')}
+            className="min-h-9 cursor-pointer rounded-md border border-line px-3"
+          >
+            Export CSV
+          </button>
+          <label className="flex min-h-9 cursor-pointer items-center rounded-md border border-line px-3">
+            Import JSON
+            <input type="file" accept="application/json" onChange={importJson} className="sr-only" />
+          </label>
+          <button
+            type="button"
+            onClick={() => {
+              if (sure('Start a new series? The games and save list of this one are cleared.')) {
+                setPlan({ ...EMPTY_PLAN, opponent: plan.opponent })
+              }
+            }}
+            className="min-h-9 cursor-pointer rounded-md border border-line px-3 text-muted"
+          >
+            New series
+          </button>
+        </div>
+      </header>
+      {importError ? (
+        <p role="alert" className="rounded border border-bad p-3 text-sm text-bad">
+          {importError}
+        </p>
+      ) : null}
+    </>
+  )
+}
+
 export function PlannerPage() {
   const teams = useQuery({ queryKey: ['teams'], queryFn: api.teams })
   const champions = useChampions()
   const [prefs] = usePrefs()
   const [plan, setPlan] = usePlan()
   const [saveChamp, setSaveChamp] = useState('')
+  const saveName = resolveChampion(
+    saveChamp,
+    champions.list.map((c) => c.name),
+  )
   const [saveGame, setSaveGame] = useState(3)
   const allChampionsId = useId()
   const locked = lockedBy(plan, champions.byName)
@@ -221,50 +349,12 @@ export function PlannerPage() {
     },
   })
 
-  const importJson = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      setPlan({ ...EMPTY_PLAN, ...(JSON.parse(await file.text()) as SeriesPlanState) })
-    }
-  }
+  const hasWork = plan.games.length > 0 || Object.keys(plan.save).length > 0
+  const sure = (message: string) => !hasWork || globalThis.confirm(message)
 
   return (
     <div className="space-y-5">
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">Fearless series planner</h1>
-          <p className="text-muted">
-            Plan the whole series: every champion picked is gone for the rest of it, for both teams.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2 text-sm">
-          <button
-            type="button"
-            onClick={() => download('fele-series-plan.json', JSON.stringify(plan, null, 2), 'application/json')}
-            className="min-h-9 cursor-pointer rounded-md border border-line px-3"
-          >
-            Export JSON
-          </button>
-          <button
-            type="button"
-            onClick={() => download('fele-series-plan.csv', toCsv(plan), 'text/csv')}
-            className="min-h-9 cursor-pointer rounded-md border border-line px-3"
-          >
-            Export CSV
-          </button>
-          <label className="flex min-h-9 cursor-pointer items-center rounded-md border border-line px-3">
-            Import JSON
-            <input type="file" accept="application/json" onChange={importJson} className="sr-only" />
-          </label>
-          <button
-            type="button"
-            onClick={() => setPlan({ ...EMPTY_PLAN, opponent: plan.opponent })}
-            className="min-h-9 cursor-pointer rounded-md border border-line px-3 text-muted"
-          >
-            New series
-          </button>
-        </div>
-      </header>
+      <PlannerHeader plan={plan} setPlan={setPlan} sure={sure} />
 
       <Section title="Series">
         <div className="flex flex-wrap items-center gap-3">
@@ -272,7 +362,16 @@ export function PlannerPage() {
             <span className="mr-2 text-muted">Opponent</span>
             <select
               value={plan.opponent}
-              onChange={(e) => setPlan({ ...plan, opponent: e.target.value })}
+              onChange={(e) => {
+                if (sure('Switch opponent? The games and save list are kept only for the same opponent.')) {
+                  setPlan({
+                    ...EMPTY_PLAN,
+                    opponent: e.target.value,
+                    bestOf: plan.bestOf,
+                    weStartBlue: plan.weStartBlue,
+                  })
+                }
+              }}
               className="min-h-9 rounded-md border border-line bg-surface px-2"
             >
               <option value="">Choose…</option>
@@ -314,7 +413,11 @@ export function PlannerPage() {
             index={i}
             champions={champions.list.map((c) => c.name)}
             onChange={(next) => setPlan({ ...plan, games: plan.games.map((x, j) => (j === i ? next : x)) })}
-            onRemove={() => setPlan({ ...plan, games: plan.games.filter((_, j) => j !== i) })}
+            onRemove={() => {
+              if (globalThis.confirm(`Remove game ${i + 1}?`)) {
+                setPlan({ ...plan, games: plan.games.filter((_, j) => j !== i) })
+              }
+            }}
           />
         ))}
         {plan.games.length < plan.bestOf ? (
@@ -373,7 +476,7 @@ export function PlannerPage() {
               <input
                 type="number"
                 min={2}
-                max={5}
+                max={plan.bestOf}
                 value={saveGame}
                 onChange={(e) => setSaveGame(Number(e.target.value))}
                 className="min-h-9 w-14 rounded-md border border-line bg-bg px-2"
@@ -381,10 +484,12 @@ export function PlannerPage() {
             </label>
             <button
               type="button"
-              disabled={!champions.byName.has(saveChamp)}
+              disabled={saveName === null}
               onClick={() => {
-                setPlan({ ...plan, save: { ...plan.save, [saveChamp]: saveGame } })
-                setSaveChamp('')
+                if (saveName) {
+                  setPlan({ ...plan, save: { ...plan.save, [saveName]: saveGame } })
+                  setSaveChamp('')
+                }
               }}
               className="min-h-9 cursor-pointer rounded-md border border-line px-3 disabled:opacity-40"
             >

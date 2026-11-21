@@ -4,11 +4,13 @@ export function Segmented<T extends string>({
   options,
   value,
   onChange,
+  disabled = false,
 }: {
   label: string
   options: readonly (readonly [T, string])[]
   value: T
   onChange: (v: T) => void
+  disabled?: boolean
 }) {
   return (
     <fieldset className="inline-flex flex-wrap items-center gap-1">
@@ -18,8 +20,9 @@ export function Segmented<T extends string>({
           key={v}
           type="button"
           aria-pressed={v === value}
+          disabled={disabled}
           onClick={() => onChange(v)}
-          className={`min-h-9 cursor-pointer rounded-md border px-3 text-sm motion-safe:transition-colors motion-safe:duration-150 ${
+          className={`min-h-9 cursor-pointer rounded-md disabled:cursor-not-allowed disabled:opacity-50 border px-3 text-sm motion-safe:transition-colors motion-safe:duration-150 ${
             v === value
               ? 'border-primary bg-primary-soft font-medium text-ink'
               : 'border-line text-muted hover:text-ink'

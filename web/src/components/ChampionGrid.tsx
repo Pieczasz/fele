@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { ChampionInfo } from '../api/client.ts'
+import { matchesChampion } from '../champions.ts'
 import { ChampionIcon } from './ChampionIcon.tsx'
 import { Segmented } from './Segmented.tsx'
 
@@ -14,7 +15,7 @@ const ROLES = [
 type RoleFilter = (typeof ROLES)[number][0]
 
 function matches(c: ChampionInfo, query: string, role: RoleFilter): boolean {
-  return (role === 'all' || c.roles.includes(role)) && c.name.toLowerCase().includes(query.trim().toLowerCase())
+  return (role === 'all' || c.roles.includes(role)) && matchesChampion(c.name, query)
 }
 
 /**
@@ -56,7 +57,7 @@ export function ChampionGrid({
                 setQuery('')
               }
             }}
-            placeholder="type, then Enter"
+            placeholder="name or nickname, Enter"
             className="min-h-9 w-44 rounded-md border border-line bg-surface px-2"
           />
         </label>

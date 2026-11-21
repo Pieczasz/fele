@@ -1,12 +1,12 @@
 import { useQuery } from '@tanstack/react-query'
-import { NavLink, Outlet, useNavigate } from 'react-router'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router'
 import { api } from '../api/client.ts'
 import { Segmented } from '../components/Segmented.tsx'
 import { shortDate } from '../format.ts'
 import { EMPTY_PLAN, usePeriod, usePlan, useTeamId } from '../hooks.ts'
 
 const TABS = [
-  ['scouting', 'Draft'],
+  ['scouting', 'Draft tendencies'],
   ['players', 'Players'],
   ['macro', 'Macro'],
 ] as const
@@ -21,13 +21,14 @@ export function TeamLayout() {
   const [period, setPeriod] = usePeriod()
   const [plan, setPlan] = usePlan()
   const navigate = useNavigate()
+  const usesPeriod = !useLocation().pathname.endsWith('/players') // the players page always shows current pools
   const team = useQuery({ queryKey: ['teams'], queryFn: api.teams }).data?.find((t) => t.team_id === teamId)
   return (
     <div className="space-y-5">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-sm text-muted">{team ? `${team.league} · scouting report` : 'Scouting report'}</p>
-          <h1 className="text-2xl font-bold">{team?.name ?? teamId}</h1>
+          <h1 className="text-2xl font-bold">{team?.name ?? 'Unknown team'}</h1>
           {team ? (
             <p className="tabular text-sm text-muted">
               {team.wins}–{team.games - team.wins} in {team.games} games ({team.series} series) ·{' '}
@@ -36,7 +37,7 @@ export function TeamLayout() {
           ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Segmented label="Period" options={PERIODS} value={period} onChange={setPeriod} />
+          {usesPeriod ? <Segmented label="Period" options={PERIODS} value={period} onChange={setPeriod} /> : null}
           <button
             type="button"
             onClick={() => {

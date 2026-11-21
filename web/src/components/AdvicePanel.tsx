@@ -89,7 +89,12 @@ export function AdvicePanel({
   }
   const ourTurn = advice.next?.who === 'us'
   return (
-    <div className="space-y-4" aria-busy={busy}>
+    <div className={`space-y-4 motion-safe:transition-opacity ${busy ? 'opacity-60' : ''}`} aria-busy={busy}>
+      {busy ? (
+        <p role="status" className="text-xs text-muted">
+          Updating for the new draft state…
+        </p>
+      ) : null}
       <WinProbBar {...advice.win_prob} />
       {advice.next ? (
         <Section

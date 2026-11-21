@@ -1,5 +1,6 @@
 import { useId, useState } from 'react'
 import type { Preferences } from '../api/client.ts'
+import { resolveChampion } from '../champions.ts'
 import { Section } from '../components/QueryState.tsx'
 import { useChampions, usePrefs } from '../hooks.ts'
 import { download } from '../store.ts'
@@ -47,8 +48,9 @@ function ChampionList({
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === 'Enter' && known.has(draft) && !values.includes(draft)) {
-            onChange([...values, draft])
+          const name = resolveChampion(draft, [...known.keys()])
+          if (e.key === 'Enter' && name && !values.includes(name)) {
+            onChange([...values, name])
             setDraft('')
           }
         }}
@@ -72,6 +74,7 @@ function PlayerEditor({
 }) {
   const pool = player.pool ?? []
   const [champion, setChampion] = useState('')
+  const poolName = resolveChampion(champion, [...known.keys()])
   return (
     <article className="rounded-lg border border-line bg-surface p-3">
       <header className="mb-2 flex items-center justify-between">
@@ -149,10 +152,12 @@ function PlayerEditor({
         />
         <button
           type="button"
-          disabled={!known.has(champion) || pool.some((c) => c.champion === champion)}
+          disabled={!poolName || pool.some((c) => c.champion === poolName)}
           onClick={() => {
-            onChange({ ...player, pool: [...pool, { champion, comfort: 'comfortable', note: '' }] })
-            setChampion('')
+            if (poolName) {
+              onChange({ ...player, pool: [...pool, { champion: poolName, comfort: 'comfortable', note: '' }] })
+              setChampion('')
+            }
           }}
           className="min-h-8 cursor-pointer rounded border border-line px-2 disabled:opacity-40"
         >
@@ -171,12 +176,16 @@ function PlayerEditor({
 }
 
 export function CoachPage() {
-  const [prefs, setPrefs, reset] = usePrefs()
+  const [prefs, setPrefs, reset, failed] = usePrefs()
   const champions = useChampions()
   const listId = useId()
   const [opponent, setOpponent] = useState('')
   if (!prefs) {
-    return (
+    return failed ? (
+      <p role="alert" className="rounded border border-bad p-4 text-bad">
+        Couldn't load the team's coach file from the API. Check that the API is running, then reload.
+      </p>
+    ) : (
       <p role="status" className="text-muted">
         Loading coach inputs…
       </p>
@@ -210,7 +219,11 @@ export function CoachPage() {
           </button>
           <button
             type="button"
-            onClick={reset}
+            onClick={() => {
+              if (globalThis.confirm('Throw away your edits and go back to the team file?')) {
+                reset()
+              }
+            }}
             className="min-h-9 cursor-pointer rounded-md border border-line px-3 text-muted"
           >
             Reset to the team file

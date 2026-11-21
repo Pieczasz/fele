@@ -22,8 +22,15 @@ export function Cards({ teamId }: { teamId: string }) {
       </p>
     )
   }
-  if (cards.isError || cards.data.length === 0) {
-    return null
+  if (cards.isError) {
+    return (
+      <p role="alert" className="text-sm text-bad">
+        Couldn't build the “how to win” cards: {cards.error.message}
+      </p>
+    )
+  }
+  if (cards.data.length === 0) {
+    return <p className="text-sm text-muted">No pattern for this team is strong enough for a card yet.</p>
   }
   return (
     <Section title="How to win" hint="Each card: the claim, its evidence (n), what to do">

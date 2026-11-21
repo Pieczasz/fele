@@ -11,13 +11,14 @@ import {
   lockedBy,
   type PlannedGame,
   playedGames,
+  seriesScore,
   useChampions,
   usePlan,
   usePrefs,
   weBlueNext,
   weFirstNext,
 } from '../hooks.ts'
-import { newId } from '../store.ts'
+import { newId, useLocalState } from '../store.ts'
 
 const SIDES = [
   ['blue', 'We are blue'],
@@ -57,10 +58,39 @@ function shortcut(e: KeyboardEvent, slot: number, advice: DraftAdvice | undefine
   return list[Number(key) - 1] ?? null
 }
 
+/** The draft in progress, kept across page changes and reloads for this opponent and game. */
+interface StoredDraft {
+  key: string // opponent:game
+  actions: string[]
+  side: 'blue' | 'red'
+  first: 'us' | 'them'
+}
+
 function isTyping(target: EventTarget | null): boolean {
   return (
     target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement
   )
+}
+
+function ChampionsPanel({
+  champions,
+  ...grid
+}: { champions: ReturnType<typeof useChampions> } & Omit<Parameters<typeof ChampionGrid>[0], 'champions'>) {
+  if (champions.query.isError) {
+    return (
+      <p role="alert" className="text-bad">
+        Couldn't load the champion list: {champions.query.error.message}
+      </p>
+    )
+  }
+  if (champions.query.isPending) {
+    return (
+      <p role="status" className="text-muted">
+        Loading champions…
+      </p>
+    )
+  }
+  return <ChampionGrid champions={champions.list} {...grid} />
 }
 
 export function DraftPage() {
@@ -69,13 +99,24 @@ export function DraftPage() {
   const [prefs] = usePrefs()
   const [plan, setPlan] = usePlan()
   const locked = lockedBy(plan, champions.byName)
-  const [side, setSide] = useState<'blue' | 'red'>(weBlueNext(plan) ? 'blue' : 'red')
-  const [first, setFirst] = useState<'us' | 'them'>(weFirstNext(plan) ? 'us' : 'them')
   const [mode, setMode] = useState<DraftRequest['mode']>('best')
-  const [actions, setActions] = useState<string[]>([])
+  const [stored, setStored] = useLocalState<StoredDraft | null>('fele-draft', null)
   const searchId = useId()
   const played = playedGames(plan)
   const gameNumber = played.length + 1
+  const key = `${plan.opponent}:${gameNumber}`
+  const fresh = (): StoredDraft => ({
+    key,
+    actions: [],
+    side: weBlueNext(plan) ? 'blue' : 'red', // the side rule picks the defaults for each new game
+    first: weFirstNext(plan) ? 'us' : 'them',
+  })
+  const draft = stored?.key === key ? stored : fresh()
+  const { actions, side, first } = draft
+  const update = (change: (d: StoredDraft) => StoredDraft) =>
+    setStored((prev) => change(prev?.key === key ? prev : fresh()))
+  const setActions = (next: (a: string[]) => string[]) => update((d) => ({ ...d, actions: next(d.actions) }))
+  const series = seriesScore(plan)
   const us = prefs?.team ?? 'Cloud9 Kia'
   const opponent = teams.data?.find((t) => t.team_id === plan.opponent)
   const wePickFirst = first === 'us'
@@ -105,12 +146,17 @@ export function DraftPage() {
   // guarded with the latest state: a double click or a stale option list can't add a champion twice or a 21st action
   const append = (c: string) =>
     setActions((a) => (a.length >= TEMPLATE.length || (c !== '' && (a.includes(c) || locked.has(c))) ? a : [...a, c]))
+  const reset = () => {
+    if (actions.length === 0 || globalThis.confirm('Clear this draft and start the game again?')) {
+      setActions(() => [])
+    }
+  }
   const takeOption = (c: string) => {
     if (!advice.isFetching) {
       append(c) // options belong to the slot they were computed for
     }
   }
-  const undo = () => setActions(actions.slice(0, -1))
+  const undo = () => setActions((a) => a.slice(0, -1))
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -140,22 +186,37 @@ export function DraftPage() {
       bans: [...s.us.ban, ...s.them.ban].filter(Boolean),
       result,
     }
-    setPlan({ ...plan, games: [...plan.games, game] })
-    setActions([])
-    setFirst(result === 'lost' ? 'us' : 'them') // the loser takes first pick, the winner chooses blue (assumed)
-    setSide(result === 'won' ? 'blue' : 'red')
+    setPlan({ ...plan, games: [...plan.games, game] }) // the next game's side and first pick follow the side rule
+    setStored(null)
   }
 
   if (!plan.opponent) {
     return (
       <div className="space-y-3">
         <h1 className="text-2xl font-bold">Mock draft</h1>
-        <p className="text-muted">
-          Choose the opponent in the{' '}
+        <label className="flex max-w-sm flex-col gap-1 text-sm">
+          <span className="font-medium">Who are we drafting against?</span>
+          <select
+            value=""
+            onChange={(e) => setPlan({ ...plan, opponent: e.target.value })}
+            className="min-h-9 rounded-md border border-line bg-surface px-2"
+          >
+            <option value="" disabled={true}>
+              Choose an opponent…
+            </option>
+            {(teams.data ?? []).map((t) => (
+              <option key={t.team_id} value={t.team_id}>
+                {t.name} ({t.league})
+              </option>
+            ))}
+          </select>
+        </label>
+        <p className="text-sm text-muted">
+          This starts a series plan against them. Game numbers and Fearless locks come from the{' '}
           <Link to="/planner" className="text-primary underline">
             series planner
-          </Link>{' '}
-          first: the board uses its game number and Fearless locks.
+          </Link>
+          .
         </p>
       </div>
     )
@@ -174,8 +235,20 @@ export function DraftPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Segmented label="Our side" options={SIDES} value={side} onChange={setSide} />
-          <Segmented label="First pick" options={FIRST} value={first} onChange={setFirst} />
+          <Segmented
+            label="Our side"
+            options={SIDES}
+            value={side}
+            onChange={(v) => update((d) => ({ ...d, side: v }))}
+            disabled={actions.length > 0}
+          />
+          <Segmented
+            label="First pick"
+            options={FIRST}
+            value={first}
+            onChange={(v) => update((d) => ({ ...d, first: v }))}
+            disabled={actions.length > 0}
+          />
           <Segmented label="Recommendation mode" options={MODES} value={mode} onChange={setMode} />
         </div>
       </header>
@@ -196,14 +269,37 @@ export function DraftPage() {
         >
           Undo
         </button>
+        {!done && kind(actions.length) === 'ban' ? (
+          <button
+            type="button"
+            onClick={() => append('')}
+            className="min-h-9 cursor-pointer rounded-md border border-line px-3 text-sm"
+          >
+            Skip this ban <kbd className="text-xs text-muted">S</kbd>
+          </button>
+        ) : null}
         <button
           type="button"
-          onClick={() => setActions([])}
+          onClick={reset}
           className="min-h-9 cursor-pointer rounded-md border border-line px-3 text-sm"
         >
           Reset
         </button>
-        {done ? (
+        {actions.length > 0 && !done ? (
+          <span className="self-center text-xs text-muted">
+            Sides are fixed once the draft starts (Reset to change).
+          </span>
+        ) : null}
+        {done && series.over ? (
+          <p className="self-center text-sm text-muted">
+            The series is already decided ({series.wins}–{series.losses}). Start a new one in the{' '}
+            <Link to="/planner" className="text-primary underline">
+              planner
+            </Link>
+            .
+          </p>
+        ) : null}
+        {done && !series.over ? (
           <>
             <button
               type="button"
@@ -223,8 +319,8 @@ export function DraftPage() {
         ) : null}
       </div>
       <div className="grid gap-5 lg:grid-cols-[1fr_24rem]">
-        <ChampionGrid
-          champions={champions.list}
+        <ChampionsPanel
+          champions={champions}
           taken={new Set(actions.filter(Boolean))}
           locked={locked}
           onPick={append}
